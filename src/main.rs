@@ -1,7 +1,13 @@
 extern crate z3_sys;
-use z3_sys::*;
+extern crate serde;
+extern crate serde_yaml;
+extern crate serde_with;
 
+use std::env;
 use std::ffi::{CStr, CString};
+use std::collections::HashMap;
+use serde::Deserialize;
+use z3_sys::*;
 
 unsafe fn check() {
   let cfg = Z3_mk_config();
@@ -50,8 +56,55 @@ unsafe fn check() {
   Z3_del_context(ctx);
 }
 
-fn main() {
+#[derive(Debug, Deserialize)]
+#[serde(untagged)] 
+enum Constraint {
+  Single(String),
+  Multiple(Vec<String>)
+}
+
+//#[serde_with::serde_as]
+#[derive(Debug, Deserialize)]
+struct RoleTemplateRules {
+  //#[serde_as(as = "HashMap<_, serde_with::DisplayFromStr>")]
+  node_labels : HashMap<String, Constraint>
+}
+
+#[derive(Debug, Deserialize)]
+struct RoleTemplateSpec {
+  allow : Option<RoleTemplateRules>,
+  deny  : Option<RoleTemplateRules>
+}
+
+#[derive(Debug, Deserialize)]
+struct RoleTemplateMetadata {
+  name : String
+}
+
+#[derive(Debug, Deserialize)]
+struct RoleTemplate {
+  kind      : String,
+  version   : String,
+  metadata  : RoleTemplateMetadata,
+  spec      : RoleTemplateSpec
+}
+
+fn compile_rbac_template(role_template : RoleTemplate) {
+  println!("{:?}", role_template);
   unsafe {
     check();
   }
+}
+
+fn main() {
+  let args: Vec<String> = env::args().collect();
+  let role_template_path = &args[1];
+  println!("Parsing role template {}", role_template_path);
+  let role_template_file =
+    std::fs::read_to_string(role_template_path)
+      .expect("Error opening role template file");
+  let role_template : RoleTemplate =
+    serde_yaml::from_str(&role_template_file)
+      .expect("Error parsing YAML in role template file");
+  compile_rbac_template(role_template);
 }

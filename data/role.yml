@@ -1,0 +1,14 @@
+kind: role
+version: v4
+metadata:
+  name: example-role
+spec:
+  allow:
+    node_labels:
+      'env' : 'stage'
+
+  deny:
+    node_labels:
+      # multiple labels are interpreted as an "or" operation.  in this case
+      # Teleport will deny access to any node labeled as 'database' or 'backup'
+      'workload': ['database', 'backup']
