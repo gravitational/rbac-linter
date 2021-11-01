@@ -9,7 +9,7 @@ kv.declare('kv', ('key', StringSort()), ('value', StringSort()))
 kv = kv.create()
 #kv1 = kv.kv(StringVal('foo'), StringVal('bar'))
 
-def analyze(role_template):
+def allows(role_template):
   allow_expr = BoolVal(True)
   spec = role_template['spec']
   if 'allow' in spec:
@@ -41,19 +41,28 @@ def analyze(role_template):
         else:
           deny_expr = And(deny_expr, Select(node_labels, key) == StringVal(value))
 
-  s = Solver()
-  s.add(And(allow_expr, Not(deny_expr)))
-      
+  return And(allow_expr, Not(deny_expr))
   #x = String('x')
   #ab = Star(Re('ab'))
   #s.add(InRe(x, ab), Length(x) == 6)
 
-  print(s.check())
-  print(s.model())
+def test_equivalence(r1, r2):
+  r1 = allows(r1)
+  r2 = allows(r2)
+  s = Solver()
+  s.add(Not(r1 == r2))
+  result = s.check()
+  print(result)
+  if sat == result:
+    print(s.model())
 
-with open('../data/role.yml', 'r') as role_template_file:
+with (
+  open('../data/role.yml', 'r') as r1,
+  open('../data/role2.yml', 'r') as r2
+):
   try:
-    role_template = yaml.safe_load(role_template_file)
-    analyze(role_template)
+    r1 = yaml.safe_load(r1)
+    r2 = yaml.safe_load(r2)
+    test_equivalence(r1, r2)
   except yaml.YAMLError as e:
     print(e)

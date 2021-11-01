@@ -6,7 +6,7 @@ spec:
   allow:
     node_labels:
       'env'   : 'stage'
-      'arch'  : ['x86', 'x64']
+      'arch'  : 'x86'
 
   deny:
     node_labels:

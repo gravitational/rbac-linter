@@ -13,3 +13,8 @@ Teleport RBAC analysis using Z3.
 1. `cargo build`
    * Note a clean Z3 build takes 10-15 minutes
 1. `cargo test`
+
+## Run Python
+
+1. `pip install -r requirements.txt --user`
+1. `python main.py`
