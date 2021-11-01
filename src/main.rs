@@ -1,8 +1,9 @@
 extern crate z3_sys;
 extern crate serde;
 extern crate serde_yaml;
-extern crate serde_with;
+mod helpers;
 
+use helpers::*;
 use std::env;
 use std::ffi::{CStr, CString};
 use std::collections::HashMap;
@@ -63,10 +64,8 @@ enum Constraint {
   Multiple(Vec<String>)
 }
 
-//#[serde_with::serde_as]
 #[derive(Debug, Deserialize)]
 struct RoleTemplateRules {
-  //#[serde_as(as = "HashMap<_, serde_with::DisplayFromStr>")]
   node_labels : HashMap<String, Constraint>
 }
 
@@ -89,11 +88,72 @@ struct RoleTemplate {
   spec      : RoleTemplateSpec
 }
 
-fn compile_rbac_template(role_template : RoleTemplate) {
-  println!("{:?}", role_template);
-  unsafe {
-    check();
+impl RoleTemplate {
+  unsafe fn is_allowed(&self, ctx : Z3_context) {
+    let str_sort = Z3_mk_string_sort(ctx);
+    let kv_tuple = to_z3_symbol(ctx, "key_value_tuple");
+    let key_field = to_z3_symbol(ctx, "key");
+    let value_field = to_z3_symbol(ctx, "value");
+    let field_names = [key_field, value_field];
+    let field_sorts = [str_sort, str_sort];
+    let mut constructor = 0 as *mut _Z3_func_decl;
+    let mut projectors = 0 as Z3_func_decl;
+    println!("{:p}", constructor);
+    println!("{:p}", projectors);
+    let tuple_sort = 
+      Z3_mk_tuple_sort(
+        ctx,
+        kv_tuple,
+        2,
+        field_names.as_ptr(),
+        field_sorts.as_ptr(),
+        &mut constructor,
+        &mut projectors
+      );
+    
+    println!("{:p}", constructor);
+    println!("{:p}", projectors);
+    let expected_key = to_z3_str(ctx, "env");
+    let expected_value = to_z3_str(ctx, "test");
+    let expected_kv = [expected_key, expected_value];
+    let expected_tuple = Z3_mk_app(ctx, constructor, 2, expected_kv.as_ptr());
+    
+    let actual_key = new_str_const(ctx, "k");
+    let actual_value = new_str_const(ctx, "v");
+    let actual_kv = [actual_key, actual_value];
+    let actual_tuple = Z3_mk_app(ctx, constructor, 2, actual_kv.as_ptr());
+    
+    let eq = Z3_mk_eq(ctx, expected_tuple, actual_tuple);
+    
+    let slvr = Z3_mk_solver(ctx);
+    //Z3_solver_assert(ctx, slvr, eq);
+    let result = Z3_solver_check(ctx, slvr);
+    println!("{:?}", result);
+    let model = Z3_solver_get_model(ctx, slvr);
+    let p = Z3_model_to_string(ctx, model);
+    let s = CStr::from_ptr(p).to_str().unwrap();
+    println!("{:?}", s);
+    Z3_del_context(ctx);
+    println!("Somehow haven't blown up");
   }
+
+  fn equivalent_to(&self, other : RoleTemplate) -> bool {
+    unsafe {
+      let cfg = Z3_mk_config();
+      let ctx = Z3_mk_context(cfg);
+      let slvr = Z3_mk_solver(ctx);
+    }
+
+    return false;
+  }
+}
+
+fn test(rt : RoleTemplate) {
+    unsafe {
+      let cfg = Z3_mk_config();
+      let ctx = Z3_mk_context(cfg);
+      rt.is_allowed(ctx);
+    }
 }
 
 fn main() {
@@ -106,5 +166,5 @@ fn main() {
   let role_template : RoleTemplate =
     serde_yaml::from_str(&role_template_file)
       .expect("Error parsing YAML in role template file");
-  compile_rbac_template(role_template);
+  test(role_template);
 }
