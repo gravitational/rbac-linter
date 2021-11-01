@@ -57,8 +57,8 @@ def test_equivalence(r1, r2):
     print(s.model())
 
 with (
-  open('../data/role.yml', 'r') as r1,
-  open('../data/role2.yml', 'r') as r2
+  open('data/role.yml', 'r') as r1,
+  open('data/role2.yml', 'r') as r2
 ):
   try:
     r1 = yaml.safe_load(r1)
