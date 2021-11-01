@@ -5,7 +5,8 @@ metadata:
 spec:
   allow:
     node_labels:
-      'env' : 'stage'
+      'env'   : 'stage'
+      'arch'  : ['x86']
 
   deny:
     node_labels:
