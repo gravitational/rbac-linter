@@ -9,42 +9,33 @@ kv.declare('kv', ('key', StringSort()), ('value', StringSort()))
 kv = kv.create()
 #kv1 = kv.kv(StringVal('foo'), StringVal('bar'))
 
-def allows(role_template):
-  allow_expr = BoolVal(True)
-  spec = role_template['spec']
-  if 'allow' in spec:
-    allow = spec['allow']
-    if 'node_labels' in allow:
-      constraints = allow['node_labels']
-      for key, value in constraints.items():
-        key = StringVal(key)
-        if isinstance(value, list):
-          list_expr = BoolVal(False)
-          for v in value:
-            list_expr = Or(list_expr, Select(node_labels, key) == StringVal(v))
-          allow_expr = And(allow_expr, list_expr)
-        else:
-          allow_expr = And(allow_expr, Select(node_labels, key) == StringVal(value))
+def matches_constraints(labels, constraints):
+  match_expr = True
+  for key, value in constraints.items():
+    key = StringVal(key)
+    if isinstance(value, list):
+      list_expr = False
+      for v in value:
+        list_expr = Or(list_expr, Select(labels, key) == StringVal(v))
+      match_expr = And(match_expr, list_expr)
+    else:
+      match_expr = And(match_expr, Select(labels, key) == StringVal(value))
 
-  deny_expr = BoolVal(True)
-  if 'deny' in spec:
-    deny = spec['deny']
-    if 'node_labels' in deny:
-      constraints = deny['node_labels']
-      for key, value in constraints.items():
-        key = StringVal(key)
-        if isinstance(value, list):
-          list_expr = BoolVal(False)
-          for v in value:
-            list_expr = Or(list_expr, Select(node_labels, key) == StringVal(v))
-          deny_expr = And(deny_expr, list_expr)
-        else:
-          deny_expr = And(deny_expr, Select(node_labels, key) == StringVal(value))
+  return match_expr
 
-  return And(allow_expr, Not(deny_expr))
   #x = String('x')
   #ab = Star(Re('ab'))
   #s.add(InRe(x, ab), Length(x) == 6)
+
+def matches_constraint_group(group):
+  match_node_labels = 'node_labels' in group and matches_constraints(node_labels, group['node_labels'])
+  return match_node_labels
+
+def allows(role_template):
+  spec = role_template['spec']
+  allow_expr = 'allow' in spec and matches_constraint_group(spec['allow'])
+  deny_expr = 'deny' in spec and matches_constraint_group(spec['deny'])
+  return And(allow_expr, Not(deny_expr))
 
 def test_equivalence(r1, r2):
   r1 = allows(r1)
