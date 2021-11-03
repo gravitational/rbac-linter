@@ -5,11 +5,8 @@ metadata:
 spec:
   allow:
     node_labels:
-      'env'   : 'stage'
-      'arch'  : ['x86', 'x64']
+      'env'   : 'a*a'
 
   deny:
     node_labels:
-      # multiple labels are interpreted as an "or" operation.  in this case
-      # Teleport will deny access to any node labeled as 'database' or 'backup'
       'workload': ['database', 'backup']
