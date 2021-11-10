@@ -24,8 +24,10 @@ jobs:
         uses: BSFishy/pip-action@v1
         with:
           requirements: requirements.txt
-      - name: Run Python script
-        run: python main.py
+      - name: Run Python role equivalence check script
+        run: python role_equivalence_check.py
+      - name: Run Python role query script
+        run: python role_query.py
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
