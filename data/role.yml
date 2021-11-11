@@ -5,7 +5,7 @@ metadata:
 spec:
   allow:
     node_labels:
-      'env'   : 'a*a'
+      'env'   : '[^abc]'
 
   deny:
     node_labels:

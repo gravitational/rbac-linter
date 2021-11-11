@@ -1,17 +1,28 @@
+from enum import Enum
 import logging
 import sre_parse
 from z3 import *
 
-# Constants
+# Helpers
+def red(str):
+  red_text_start = '\033[0;31m'
+  red_text_end = '\033[00m'
+  return red_text_start + str + red_text_end
+
+# Z3 Constants
 node_labels = Function('node_labels', StringSort(), StringSort())
 kubernetes_labels = Function('kubernetes_labels', StringSort(), StringSort())
 database_labels = Function('database_labels', StringSort(), StringSort())
+constraint_types = {
+  'node_labels'       : node_labels,
+  'kubernetes_labels' : kubernetes_labels,
+  'database_labels'   : database_labels
+}
 
-# Datatypes
-kv = Datatype('kv')
-kv.declare('kv', ('key', StringSort()), ('value', StringSort()))
-kv = kv.create()
-#kv1 = kv.kv(StringVal('foo'), StringVal('bar'))
+class ConstraintType(Enum):
+  NODE = node_labels
+  KUBERNETES = kubernetes_labels
+  DATABASE = database_labels
 
 # Tests whether the given regex can just be treated as a string.
 # For example, we can use normal string comparison for 'ababab' instead of
@@ -19,16 +30,39 @@ kv = kv.create()
 def is_regex(parsed_regex):
   return not all([sre_parse.LITERAL == node_type for node_type, _ in parsed_regex])
 
+# The Z3 regex matching all strings accepted by re1 but not re2.
+# Formatted in camelcase to mimic Z3 regex API.
+def Minus(re1, re2):
+  return Intersect(re1, Complement(re2))
+
+# The Z3 regex matching any ASCII character.
+# Formatted in camelcase to mimic Z3 regex API.
+def AnyAsciiChar():
+  return Range(chr(0), chr(127))
+
+# Defines regex categories in Z3.
+def category_regex(category):
+  if sre_parse.CATEGORY_DIGIT == category:
+    return Range('0', '9')
+  elif sre_parse.CATEGORY_SPACE == category:
+    return Union(Re(' '), Re('\t'), Re('\n'), Re('\r'), Re('\f'), Re('\v'))
+  elif sre_parse.CATEGORY_WORD == category:
+    return Union(Range('a', 'z'), Range('A', 'Z'), Range('0', '9'), Re('_'))
+  else:
+    quit(red(f'ERROR: regex category {category} not yet implemented'))
+    
 # Translates a specific regex construct into its Z3 equivalent.
 def regex_construct_to_z3_expr(regex_construct):
   node_type, node_value = regex_construct
   if sre_parse.LITERAL == node_type: # a
     return Re(chr(node_value))
+  if sre_parse.NOT_LITERAL == node_type: # [^a]
+    return Minus(AnyAsciiChar(), Re(chr(node_value)))
   if sre_parse.SUBPATTERN == node_type:
     _, _, _, value = node_value
     return regex_to_z3_expr(value)
   elif sre_parse.ANY == node_type: # .
-    return Range(chr(0), chr(127)) # Support ASCII for now
+    return AnyAsciiChar()
   elif sre_parse.MAX_REPEAT == node_type:
     low, high, value = node_value
     if (0, 1) == (low, high): # a?
@@ -40,26 +74,55 @@ def regex_construct_to_z3_expr(regex_construct):
     else: # a{3,5}, a{3}
       return Loop(low, high, regex_to_z3_expr(value))
   elif sre_parse.IN == node_type: # [abc]
-    return Union([regex_to_z3_expr(value) for value in node_value])
+    first_subnode_type, _ = node_value[0]
+    if sre_parse.NEGATE == first_subnode_type: # [^abc]
+      return Minus(AnyAsciiChar(), Union([regex_construct_to_z3_expr(value) for value in node_value[1:]]))
+    else:
+      return Union([regex_construct_to_z3_expr(value) for value in node_value])
   elif sre_parse.BRANCH == node_type: # ab|cd
-    return Union([regex_to_z3_expr(value) for _, value in node_value])
+    _, value = node_value
+    return Union([regex_to_z3_expr(v) for v in value])
   elif sre_parse.RANGE == node_type: # [a-z]
     low, high = node_value
     return Range(chr(low), chr(high))
+  elif sre_parse.CATEGORY == node_type: # \d, \s, \w
+    if sre_parse.CATEGORY_DIGIT == node_value: # \d
+      return category_regex(node_value)
+    elif sre_parse.CATEGORY_NOT_DIGIT == node_value: # \D
+      return Minus(AnyAsciiChar(), category_regex(sre_parse.CATEGORY_DIGIT))
+    elif sre_parse.CATEGORY_SPACE == node_value: # \s
+      return category_regex(node_value)
+    elif sre_parse.CATEGORY_NOT_SPACE == node_value: # \S
+      return Minus(AnyAsciiChar(), category_regex(sre_parse.CATEGORY_SPACE))
+    elif sre_parse.CATEGORY_WORD == node_value: # \w
+      return category_regex(node_value)
+    elif sre_parse.CATEGORY_NOT_WORD == node_value: # \W
+      return Minus(AnyAsciiChar(), category_regex(sre_parse.CATEGORY_WORD))
+    else:
+      quit(red(f'ERROR: regex category {node_value} not implemented'))
+  elif sre_parse.AT == node_type:
+    if sre_parse.AT_BEGINNING_STRING == node_value:
+      quit(red(f'ERROR: regex position {node_value} not implemented'))
+    elif sre_parse.AT_BOUNDARY == node_value:
+      quit(red(f'ERROR: regex position {node_value} not implemented'))
+    elif sre_parse.AT_NON_BOUNDARY == node_value:
+      quit(red(f'ERROR: regex position {node_value} not implemented'))
+    elif sre_parse.AT_END_STRING == node_value:
+      quit(red(f'ERROR: regex position {node_value} not implemented'))
+    else:
+      quit(red(f'ERROR: regex position {node_value} not implemented'))
   else:
-    quit(f'Regex construct {regex_construct} not yet implemented')
+    quit(red(f'ERROR: regex construct {regex_construct} not implemented'))
 
 # Translates a parsed regex into its Z3 equivalent.
 # The parsed regex is a sequence of regex constructs (literals, *, +, etc.)
 def regex_to_z3_expr(regex):
-  logging.debug(f'Regex {regex}')
   if 0 == len(regex):
-    quit('ERROR: regex is empty')
+    quit(red('ERROR: regex is empty'))
   elif 1 == len(regex):
     return regex_construct_to_z3_expr(regex[0])
   else:
     expr = Concat([regex_construct_to_z3_expr(construct) for construct in regex])
-    logging.debug(expr)
     return expr
 
 # Constructs an expression evaluating whether a specific label constraint
@@ -70,13 +133,19 @@ def regex_to_z3_expr(regex):
 # 'location' : 'us-east-[\d]+'
 #
 def matches_value(labels, key, value):
-  logging.debug(f'Constraint {key} : {value}')
   if '*' == value:
     return True
 
-  parsed_regex = sre_parse.parse(value)
+  try:
+    parsed_regex = sre_parse.parse(value)
+  except Exception as e:
+    quit(red(f'ERROR: cannot parse regex {value} - {e}'))
+
   if is_regex(parsed_regex):
-    return InRe(labels(key), regex_to_z3_expr(parsed_regex))
+    logging.debug(f'Uncompiled regex {parsed_regex}')
+    regex = regex_to_z3_expr(parsed_regex)
+    logging.debug(f'Compiled regex {regex}')
+    return InRe(labels(key), regex)
   else:
     return labels(key) == StringVal(value)
 
@@ -88,12 +157,12 @@ def matches_value(labels, key, value):
 # 'env' : ['test', 'prod']
 #
 def matches_constraint(labels, key, value):
-  logging.debug(f'Constraint {key} : {value}')
+  logging.debug(f'Compiling {key} : {value} constraint')
   if '*' == key:
     if '*' == value:
       return True
     else:
-      quit(f'Constraint of type \'*\' : {value} not supported')
+      quit(red(f'Constraint of type \'*\' : {value} not supported'))
 
   key = StringVal(key)
   if isinstance(value, list):
@@ -108,7 +177,8 @@ def matches_constraint(labels, key, value):
 #
 # {'env' : ['test', 'prod'], 'location' : 'us-east-[\d]+' }
 #
-def matches_constraints(labels, constraints):
+def matches_constraints(constraint_type, labels, constraints):
+  logging.debug(f'Compiling {constraint_type} constraints')
   return And([
     matches_constraint(labels, key, value)
     for key, value in constraints.items()
@@ -126,14 +196,9 @@ def matches_constraints(labels, constraints):
 #   'contains_PII' : 'no'
 #
 def matches_constraint_group(group):
-  constraint_types = {
-    'node_labels'       : node_labels,
-    'kubernetes_labels' : kubernetes_labels,
-    'database_labels'   : database_labels
-  }
-
   return Or([
-    constraint_type in group and matches_constraints(labels, group[constraint_type])
+    constraint_type in group
+    and matches_constraints(constraint_type, labels, group[constraint_type])
     for constraint_type, labels in constraint_types.items()
   ])
 
@@ -152,12 +217,18 @@ def matches_constraint_group(group):
 #      'env' : 'prod'
 #
 def allows(role_template):
+  role_name = role_template['metadata']['name']
+  logging.debug(f'Compiling role template {role_name}')
   spec = role_template['spec']
+  logging.debug('Compiling allow constraints')
   allow_expr = 'allow' in spec and matches_constraint_group(spec['allow'])
+  logging.debug('Compiling deny constraints')
   deny_expr = 'deny' in spec and matches_constraint_group(spec['deny'])
   return And(allow_expr, Not(deny_expr))
 
-def labels_as_map(labels):
-  print(labels.items())
-  print([(key, value) for key, value in labels.items()])
-  return And([node_labels(StringVal(key)) == value for key, value in labels.items()])
+# Compiles the labels of a given node, k8s cluster, or database into a
+# form understood by Z3 that can be checked against a compiled set of role
+# constraints.
+def labels_as_z3_map(labels, constraint_type):
+  logging.debug(f'Compiling labels {labels} of type {constraint_type.name}')
+  return And([constraint_type.value(StringVal(key)) == value for key, value in labels.items()])
