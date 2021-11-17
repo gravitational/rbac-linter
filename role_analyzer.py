@@ -19,6 +19,7 @@ constraint_types = {
   'database_labels'   : database_labels
 }
 
+# The three types of constraints and their corresponding Z3 constant functions.
 class ConstraintType(Enum):
   NODE = node_labels
   KUBERNETES = kubernetes_labels
@@ -72,7 +73,7 @@ def regex_construct_to_z3_expr(regex_construct):
     elif (1, sre_parse.MAXREPEAT) == (low, high): # a+
       return Plus(regex_to_z3_expr(value))
     else: # a{3,5}, a{3}
-      return Loop(low, high, regex_to_z3_expr(value))
+      return Loop(regex_to_z3_expr(value), low, high)
   elif sre_parse.IN == node_type: # [abc]
     first_subnode_type, _ = node_value[0]
     if sre_parse.NEGATE == first_subnode_type: # [^abc]
@@ -101,13 +102,13 @@ def regex_construct_to_z3_expr(regex_construct):
     else:
       quit(red(f'ERROR: regex category {node_value} not implemented'))
   elif sre_parse.AT == node_type:
-    if sre_parse.AT_BEGINNING_STRING == node_value:
+    if node_value in {sre_parse.AT_BEGINNING, sre_parse.AT_BEGINNING_STRING}: # ^a, \A
       quit(red(f'ERROR: regex position {node_value} not implemented'))
-    elif sre_parse.AT_BOUNDARY == node_value:
+    elif sre_parse.AT_BOUNDARY == node_value: # \b
       quit(red(f'ERROR: regex position {node_value} not implemented'))
-    elif sre_parse.AT_NON_BOUNDARY == node_value:
+    elif sre_parse.AT_NON_BOUNDARY == node_value: # \B
       quit(red(f'ERROR: regex position {node_value} not implemented'))
-    elif sre_parse.AT_END_STRING == node_value:
+    elif node_value in {sre_parse.AT_END, sre_parse.AT_END_STRING}: # a$, \Z
       quit(red(f'ERROR: regex position {node_value} not implemented'))
     else:
       quit(red(f'ERROR: regex position {node_value} not implemented'))
@@ -122,8 +123,7 @@ def regex_to_z3_expr(regex):
   elif 1 == len(regex):
     return regex_construct_to_z3_expr(regex[0])
   else:
-    expr = Concat([regex_construct_to_z3_expr(construct) for construct in regex])
-    return expr
+    return Concat([regex_construct_to_z3_expr(construct) for construct in regex])
 
 # Constructs an expression evaluating whether a specific label constraint
 # is satisfied by a given node, database, or k8s cluster; constraint must
