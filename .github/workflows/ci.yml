@@ -29,7 +29,7 @@ jobs:
       - name: Run Python role equivalence check script
         run: python role_equivalence_check.py data/role.yml data/role2.yml --debug
       - name: Run Python role query script
-        run: python role_query.py data/nodes.yml data/roles.yml
+        run: python role_query.py data/nodes.yml data/roles.yml --debug
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:

@@ -1,5 +1,6 @@
 from enum import Enum
 import logging
+import re
 import sre_parse
 from z3 import *
 
@@ -9,21 +10,49 @@ def red(str):
   red_text_end = '\033[00m'
   return red_text_start + str + red_text_end
 
-# Z3 Constants
+# Z3 Node Constants
+app_labels = Function('app_labels', StringSort(), StringSort())
 node_labels = Function('node_labels', StringSort(), StringSort())
 kubernetes_labels = Function('kubernetes_labels', StringSort(), StringSort())
-database_labels = Function('database_labels', StringSort(), StringSort())
+db_labels = Function('db_labels', StringSort(), StringSort())
 constraint_types = {
+  'app_labels'        : app_labels,
   'node_labels'       : node_labels,
   'kubernetes_labels' : kubernetes_labels,
-  'database_labels'   : database_labels
+  'db_labels'         : db_labels
 }
 
 # The three types of constraints and their corresponding Z3 constant functions.
 class ConstraintType(Enum):
+  APP = app_labels
   NODE = node_labels
   KUBERNETES = kubernetes_labels
-  DATABASE = database_labels
+  DATABASE = db_labels
+
+# Z3 User Constants
+internal_traits = Function('internal_traits', StringSort(), StringSort())
+external_traits = Function('external_traits', StringSort(), StringSort())
+template_types = {
+  'internal'  : internal_traits,
+  'external'  : external_traits
+}
+
+# Regex pattern for {{internal:logins}} or {{external:email}} type template values.
+template_value_pattern = re.compile('\{\{(?P<type>internal|external)\.(?P<key>[\w]+)\}\}')
+
+# Determines whether the given constraint value is a template value.
+def is_template_value(value):
+  return template_value_pattern.match(value) != None
+
+# Parses the template value into an expression over a user traits constant.
+def template_value(value):
+  match = template_value_pattern.match(value)
+  template_value_type = match.group('type')
+  template_value_key = match.group('key')
+  logging.debug(f'Template constraint of type {template_value_type} on key {template_value_key}')
+  template_value_type = template_types[template_value_type]
+  template_value_key = StringVal(template_value_key)
+  return template_value_type(template_value_key)
 
 # Tests whether the given regex can just be treated as a string.
 # For example, we can use normal string comparison for 'ababab' instead of
@@ -135,6 +164,9 @@ def regex_to_z3_expr(regex):
 def matches_value(labels, key, value):
   if '*' == value:
     return True
+
+  if is_template_value(value):
+    return labels(key) == template_value(value)
 
   try:
     parsed_regex = sre_parse.parse(value)

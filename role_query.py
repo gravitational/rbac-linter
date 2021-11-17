@@ -1,6 +1,6 @@
 import argparse
 import logging
-from role_analyzer import allows, labels_as_z3_map, ConstraintType
+from role_analyzer import allows, labels_as_z3_map, ConstraintType, internal_traits
 import yaml
 from z3 import *
 
@@ -11,10 +11,12 @@ def node_matches_role(nodes, roles):
     node_name = node['spec']['hostname']
     node_labels = node['metadata']['labels']
     s.add(labels_as_z3_map(node_labels, ConstraintType.NODE))
+    s.add(internal_traits(StringVal('logins')) == StringVal('ahelwer'))
     s.check()
     for role in roles:
       role_name = role['metadata']['name']
-      result = s.model().evaluate(allows(role), model_completion=True)
+      #result = s.model().evaluate(allows(role), model_completion=True)
+      result = s.model().eval(allows(role))
       if result:
         print(f'Node {node_name} matches role {role_name}')
       else:
