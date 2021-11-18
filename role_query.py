@@ -1,6 +1,6 @@
 import argparse
 import logging
-from role_analyzer import allows, labels_as_z3_map, ConstraintType, internal_traits
+from role_analyzer import allows, is_role_template, labels_as_z3_map, ConstraintType
 import yaml
 from z3 import *
 
@@ -11,16 +11,17 @@ def node_matches_role(nodes, roles):
     node_name = node['spec']['hostname']
     node_labels = node['metadata']['labels']
     s.add(labels_as_z3_map(node_labels, ConstraintType.NODE))
-    s.add(internal_traits(StringVal('logins')) == StringVal('ahelwer'))
     s.check()
     for role in roles:
       role_name = role['metadata']['name']
-      #result = s.model().evaluate(allows(role), model_completion=True)
-      result = s.model().eval(allows(role))
-      if result:
-        print(f'Node {node_name} matches role {role_name}')
+      if is_role_template(role):
+        print(f'Role {role_name} is a role template so it is unknown whether it is matched by node {node_name}')
       else:
-        print(f'Node {node_name} does not match role {role_name}')
+        result = s.model().evaluate(allows(role), model_completion=True)
+        if result:
+          print(f'Node {node_name} matches role {role_name}')
+        else:
+          print(f'Node {node_name} does not match role {role_name}')
     s.pop()
 
 parser = argparse.ArgumentParser(description='Determine which nodes match which roles.')

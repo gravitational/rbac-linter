@@ -160,6 +160,7 @@ def regex_to_z3_expr(regex):
 # Example value for key : value parameters:
 #
 # 'location' : 'us-east-[\d]+'
+# 'owner' : {{external.email}}
 #
 def matches_value(labels, key, value):
   if '*' == value:
@@ -234,9 +235,9 @@ def matches_constraint_group(group):
     for constraint_type, labels in constraint_types.items()
   ])
 
-# Constructs an expression evaluating to whether a given role template
+# Constructs an expression evaluating to whether a given role
 # gives access to a specific node, database, or k8s cluster.
-# Example value for role_template parameter:
+# Example value for role parameter:
 #
 # spec:
 #  allow:
@@ -248,10 +249,10 @@ def matches_constraint_group(group):
 #    node_labels:
 #      'env' : 'prod'
 #
-def allows(role_template):
-  role_name = role_template['metadata']['name']
+def allows(role):
+  role_name = role['metadata']['name']
   logging.debug(f'Compiling role template {role_name}')
-  spec = role_template['spec']
+  spec = role['spec']
   logging.debug('Compiling allow constraints')
   allow_expr = 'allow' in spec and matches_constraint_group(spec['allow'])
   logging.debug('Compiling deny constraints')
@@ -264,3 +265,14 @@ def allows(role_template):
 def labels_as_z3_map(labels, constraint_type):
   logging.debug(f'Compiling labels {labels} of type {constraint_type.name}')
   return And([constraint_type.value(StringVal(key)) == value for key, value in labels.items()])
+
+# Determines whether the given role is a role template, filled in by user traits.
+def is_role_template(role):
+  spec = role['spec']
+  allow = spec['allow']
+  groups = [allow[constraint_type].values() for constraint_type in constraint_types.keys() if constraint_type in allow]
+  any_template_values_in_allow = any([is_template_value(value) for values in groups for value in values])
+  deny = spec['deny']
+  groups = [deny[constraint_type] for constraint_type in constraint_types.keys() if constraint_type in deny]
+  any_template_values_in_deny = any([is_template_value(value) for values in groups for value in values])
+  return any_template_values_in_allow or any_template_values_in_deny
