@@ -1,0 +1,314 @@
+kind: role
+metadata:
+  description: Access cluster resources
+  id: 1634925319381844460
+  name: access
+spec:
+  allow:
+    app_labels:
+      '*': '*'
+    db_labels:
+      '*': '*'
+    db_names:
+    - '{{internal.db_names}}'
+    db_users:
+    - '{{internal.db_users}}'
+    kubernetes_groups:
+    - '{{internal.kubernetes_groups}}'
+    kubernetes_labels:
+      '*': '*'
+    kubernetes_users:
+    - '{{internal.kubernetes_users}}'
+    logins:
+    - '{{internal.logins}}'
+    node_labels:
+      '*': '*'
+    rules:
+    - resources:
+      - event
+      verbs:
+      - list
+      - read
+  deny: {}
+  options:
+    cert_format: standard
+    enhanced_recording:
+    - command
+    - network
+    forward_agent: true
+    max_session_ttl: 30h0m0s
+    port_forwarding: true
+version: v3
+---
+kind: role
+metadata:
+  id: 1636649134427231941
+  name: access-private
+spec:
+  allow:
+    logins:
+    - '{{internal.logins}}'
+    node_labels:
+      env: private
+      owner: '{{internal.logins}}'
+  deny: {}
+  options:
+    cert_format: standard
+    enhanced_recording:
+    - command
+    - network
+    forward_agent: false
+    max_session_ttl: 30h0m0s
+    port_forwarding: true
+version: v4
+---
+kind: role
+metadata:
+  id: 1636562612237930112
+  name: access-public
+spec:
+  allow:
+    logins:
+    - '{{internal.logins}}'
+    node_labels:
+      env: public
+      owner: '*'
+  deny: {}
+  options:
+    cert_format: standard
+    enhanced_recording:
+    - command
+    - network
+    forward_agent: false
+    max_session_ttl: 30h0m0s
+    port_forwarding: true
+version: v4
+---
+kind: role
+metadata:
+  id: 1634925319373055205
+  labels:
+    migrate-v6.0: "true"
+  name: admin
+spec:
+  allow:
+    app_labels:
+      '*': '*'
+    db_labels:
+      '*': '*'
+    db_names:
+    - '{{internal.db_names}}'
+    db_users:
+    - '{{internal.db_users}}'
+    kubernetes_groups:
+    - '{{internal.kubernetes_groups}}'
+    kubernetes_labels:
+      '*': '*'
+    kubernetes_users:
+    - '{{internal.kubernetes_users}}'
+    logins:
+    - '{{internal.logins}}'
+    node_labels:
+      '*': '*'
+    rules:
+    - resources:
+      - event
+      verbs:
+      - list
+      - read
+    - resources:
+      - session
+      verbs:
+      - list
+      - read
+  deny: {}
+  options:
+    cert_format: standard
+    enhanced_recording:
+    - command
+    - network
+    forward_agent: true
+    max_session_ttl: 30h0m0s
+    port_forwarding: true
+version: v3
+---
+kind: role
+metadata:
+  description: Review cluster events and replay sessions
+  id: 1634925319382187566
+  name: auditor
+spec:
+  allow:
+    app_labels:
+      '*': '*'
+    db_labels:
+      '*': '*'
+    kubernetes_labels:
+      '*': '*'
+    logins:
+    - no-login-3269eef7-7f46-4743-bd4a-b3bfee76ef86
+    node_labels:
+      '*': '*'
+    rules:
+    - resources:
+      - session
+      verbs:
+      - list
+      - read
+    - resources:
+      - event
+      verbs:
+      - list
+      - read
+  deny:
+    app_labels:
+      '*': '*'
+    db_labels:
+      '*': '*'
+    kubernetes_labels:
+      '*': '*'
+    node_labels:
+      '*': '*'
+  options:
+    cert_format: standard
+    enhanced_recording:
+    - command
+    - network
+    forward_agent: false
+    max_session_ttl: 30h0m0s
+    port_forwarding: true
+version: v3
+---
+kind: role
+metadata:
+  description: Edit cluster configuration
+  id: 1634925319381559955
+  name: editor
+spec:
+  allow:
+    app_labels:
+      '*': '*'
+    db_labels:
+      '*': '*'
+    kubernetes_labels:
+      '*': '*'
+    rules:
+    - resources:
+      - user
+      verbs:
+      - list
+      - create
+      - read
+      - update
+      - delete
+    - resources:
+      - role
+      verbs:
+      - list
+      - create
+      - read
+      - update
+      - delete
+    - resources:
+      - oidc
+      verbs:
+      - list
+      - create
+      - read
+      - update
+      - delete
+    - resources:
+      - saml
+      verbs:
+      - list
+      - create
+      - read
+      - update
+      - delete
+    - resources:
+      - github
+      verbs:
+      - list
+      - create
+      - read
+      - update
+      - delete
+    - resources:
+      - cluster_auth_preference
+      verbs:
+      - list
+      - create
+      - read
+      - update
+      - delete
+    - resources:
+      - auth_connector
+      verbs:
+      - list
+      - create
+      - read
+      - update
+      - delete
+    - resources:
+      - cluster_config
+      verbs:
+      - list
+      - create
+      - read
+      - update
+      - delete
+    - resources:
+      - trusted_cluster
+      verbs:
+      - list
+      - create
+      - read
+      - update
+      - delete
+    - resources:
+      - remote_cluster
+      verbs:
+      - list
+      - create
+      - read
+      - update
+      - delete
+    - resources:
+      - token
+      verbs:
+      - list
+      - create
+      - read
+      - update
+      - delete
+  deny: {}
+  options:
+    cert_format: standard
+    enhanced_recording:
+    - command
+    - network
+    forward_agent: true
+    max_session_ttl: 30h0m0s
+    port_forwarding: true
+version: v3
+---
+kind: role
+metadata:
+  id: 1636408194319332328
+  name: test
+spec:
+  allow:
+    logins:
+    - ahelwer
+    node_labels:
+      '*': '*'
+  deny: {}
+  options:
+    cert_format: standard
+    enhanced_recording:
+    - command
+    - network
+    forward_agent: false
+    max_session_ttl: 30h0m0s
+    port_forwarding: true
+version: v4

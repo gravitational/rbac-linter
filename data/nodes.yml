@@ -1,0 +1,45 @@
+kind: node
+metadata:
+  expires: "2021-11-17T20:46:44.616549096Z"
+  id: 1637181404634422493
+  labels:
+    env: private
+    owner: ahelwer
+  name: c7b7672a-0021-4e03-87b2-2c68ff77037d
+spec:
+  addr: ""
+  hostname: raspberrypi
+  rotation:
+    current_id: ""
+    last_rotated: "0001-01-01T00:00:00Z"
+    schedule:
+      standby: "0001-01-01T00:00:00Z"
+      update_clients: "0001-01-01T00:00:00Z"
+      update_servers: "0001-01-01T00:00:00Z"
+    started: "0001-01-01T00:00:00Z"
+  use_tunnel: true
+  version: 7.3.3
+version: v2
+---
+kind: node
+metadata:
+  expires: "2021-11-17T20:46:50.097200197Z"
+  id: 1637181410097635505
+  labels:
+    env: public
+    owner: ahelwer
+  name: e6806c84-229b-42dc-9804-dd2fb08b9ce9
+spec:
+  addr: 10.0.0.4:3022
+  hostname: avalanche
+  public_addr: teleport-proxy.hostname.com:3080
+  rotation:
+    current_id: ""
+    last_rotated: "0001-01-01T00:00:00Z"
+    schedule:
+      standby: "0001-01-01T00:00:00Z"
+      update_clients: "0001-01-01T00:00:00Z"
+      update_servers: "0001-01-01T00:00:00Z"
+    started: "0001-01-01T00:00:00Z"
+  version: 7.3.3
+version: v2
