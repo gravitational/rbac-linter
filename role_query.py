@@ -15,7 +15,7 @@ def node_matches_role(nodes, roles):
     for role in roles:
       role_name = role['metadata']['name']
       if is_role_template(role):
-        print(f'Role {role_name} is a role template so it is unknown whether it is matched by node {node_name}')
+        print(f'Role {role_name} is a role template; try specifying --users to check who has access')
       else:
         result = s.model().evaluate(allows(role), model_completion=True)
         if result:
@@ -24,21 +24,33 @@ def node_matches_role(nodes, roles):
           print(f'Node {node_name} does not match role {role_name}')
     s.pop()
 
-parser = argparse.ArgumentParser(description='Determine which nodes match which roles.')
-parser.add_argument('nodes', metavar='NODES', type=str, help='Path to the nodes yaml file')
-parser.add_argument('roles', metavar='ROLES', type=str, help='Path to the roles yaml file')
-parser.add_argument('--debug', dest='log_level', action='store_const', const=logging.DEBUG, default=logging.INFO, help='Print Z3 translation debug output')
-args = parser.parse_args()
+def node_matches_user(nodes, roles, users):
+  return True
 
-logging.basicConfig(level=args.log_level)
+def main():
+  parser = argparse.ArgumentParser(description='Determine which nodes match which roles. If path to users file is given, can resolve role templates and determine which users have access to which nodes.')
+  parser.add_argument('nodes', metavar='NODES', type=argparse.FileType('r'), help='Path to the nodes yaml file')
+  parser.add_argument('roles', metavar='ROLES', type=argparse.FileType('r'), help='Path to the roles yaml file')
+  parser.add_argument('-u', '--users', dest='users', metavar='USERS', default='', type=str, help='Path to the users yaml file')
+  parser.add_argument('-d', '--debug', dest='log_level', action='store_const', const=logging.DEBUG, default=logging.INFO, help='Print Z3 translation debug output')
+  args = parser.parse_args()
 
-with (
-  open(args.nodes, 'r') as nodes,
-  open(args.roles, 'r') as roles
-):
+  logging.basicConfig(level=args.log_level)
+
   try:
-    nodes = [yaml.safe_load(node) for node in nodes.read().split('---')]
-    roles = [yaml.safe_load(role) for role in roles.read().split('---')]
-    node_matches_role(nodes, roles)
+    nodes = [yaml.safe_load(node) for node in args.nodes.read().split('---')]
+    roles = [yaml.safe_load(role) for role in args.roles.read().split('---')]
+    if '' == args.users:
+      node_matches_role(nodes, roles)
+    else:
+      with open(args.users, 'r') as users:
+        users = [yaml.safe_load(user) for user in users.read().split('---')]
+        node_matches_user(nodes, roles, users)
   except yaml.YAMLError as e:
     print(e)
+
+  args.nodes.close()
+  args.roles.close()
+
+if __name__ == '__main__':
+  main()

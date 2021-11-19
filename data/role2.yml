@@ -6,6 +6,8 @@ spec:
   allow:
     node_labels:
       'env'   : 'aa*'
+      'owner' : '{{internal.key2}}'
+      'fooba' : 'asdf'
 
   deny:
     node_labels:

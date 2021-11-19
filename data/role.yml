@@ -5,7 +5,9 @@ metadata:
 spec:
   allow:
     node_labels:
-      'env'   : '[abc^n]'
+      'env'   : 'a*a'
+      'owner' : '{{internal.key1}}'
+      'fooba' : 'asdf'
 
   deny:
     node_labels:
