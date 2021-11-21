@@ -21,8 +21,6 @@ constraint_types = {
   'kubernetes_labels' : kubernetes_labels,
   'db_labels'         : db_labels
 }
-
-# The three types of constraints and their corresponding Z3 constant functions.
 class ConstraintType(Enum):
   APP = app_labels
   NODE = node_labels
@@ -36,6 +34,9 @@ template_types = {
   'internal'  : internal_traits,
   'external'  : external_traits
 }
+class UserType(Enum):
+  INTERNAL = internal_traits
+  EXTERNAL = external_traits
 
 # Regex pattern for {{internal:logins}} or {{external:email}} type template values.
 template_value_pattern = re.compile('\{\{(?P<type>internal|external)\.(?P<key>[\w]+)\}\}')
@@ -259,13 +260,6 @@ def allows(role):
   deny_expr = 'deny' in spec and matches_constraint_group(spec['deny'])
   return And(allow_expr, Not(deny_expr))
 
-# Compiles the labels of a given node, k8s cluster, or database into a
-# form understood by Z3 that can be checked against a compiled set of role
-# constraints.
-def labels_as_z3_map(labels, constraint_type):
-  logging.debug(f'Compiling labels {labels} of type {constraint_type.name}')
-  return And([constraint_type.value(StringVal(key)) == value for key, value in labels.items()])
-
 # Determines whether the given role is a role template, filled in by user traits.
 def is_role_template(role):
   spec = role['spec']
@@ -276,3 +270,14 @@ def is_role_template(role):
   groups = [deny[constraint_type] for constraint_type in constraint_types.keys() if constraint_type in deny]
   any_template_values_in_deny = any([is_template_value(value) for values in groups for value in values])
   return any_template_values_in_allow or any_template_values_in_deny
+
+# Compiles the labels of a given node, k8s cluster, or database into a
+# form understood by Z3 that can be checked against a compiled set of role
+# constraints.
+def labels_as_z3_map(labels, constraint_type):
+  logging.debug(f'Compiling labels {labels} of type {constraint_type.name}')
+  return And([constraint_type.value(StringVal(key)) == StringVal(value) for key, value in labels.items()])
+
+def traits_as_z3_map(traits, user_type):
+  logging.debug(f'Compiling user traits {traits} of type {user_type.name}')
+  return And([user_type.value(StringVal(key)) == value for key, values in traits.items() for value in values])

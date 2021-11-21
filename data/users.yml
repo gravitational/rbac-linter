@@ -1,0 +1,52 @@
+kind: user
+metadata:
+  id: 1636563144787639459
+  name: ahelwer
+spec:
+  created_by:
+    time: "2021-11-05T21:58:20.661979938Z"
+    user:
+      name: teleport-admin
+  expires: "0001-01-01T00:00:00Z"
+  roles:
+  - access-public
+  - access-private
+  status:
+    is_locked: false
+    lock_expires: "0001-01-01T00:00:00Z"
+    locked_time: "0001-01-01T00:00:00Z"
+    recovery_attempt_lock_expires: "0001-01-01T00:00:00Z"
+  traits:
+    logins:
+    - ahelwer
+    name:
+    - ahelwer
+version: v2
+---
+kind: user
+metadata:
+  id: 1636562292745310320
+  name: teleport-admin
+spec:
+  created_by:
+    time: "2021-11-05T21:30:12.113876083Z"
+    user:
+      name: e6806c84-229b-42dc-9804-dd2fb08b9ce9.teleport.avax-validator.com
+  expires: "0001-01-01T00:00:00Z"
+  roles:
+  - admin
+  - editor
+  - access
+  status:
+    is_locked: false
+    lock_expires: "0001-01-01T00:00:00Z"
+    locked_time: "0001-01-01T00:00:00Z"
+    recovery_attempt_lock_expires: "0001-01-01T00:00:00Z"
+  traits:
+    kubernetes_groups:
+    - ""
+    kubernetes_users:
+    - ""
+    logins:
+    - azureuser
+version: v2
