@@ -42,11 +42,14 @@ class ValueType(Enum):
   MATCH_ANY = auto()
   STRING = auto()
   REGEX = auto()
+  TEMPLATE = auto()
   INTERPOLATION = auto()
   FUNCTION = auto()
 
-# Regex pattern for {{internal:logins}} or {{external:email}} type template values.
+# Regex pattern for {{internal.logins}} or {{external.email}} type template values.
 template_value_pattern = re.compile('\{\{(?P<type>internal|external)\.(?P<key>[\w]+)\}\}')
+# Regex pattern for IAM#{{internal.logins}}#user type interpolation values.
+interpolation_value_pattern = re.compile('(?P<prefix>.*)\{\{(?P<type>internal|external)\.(?P<key>[\w]+)\}\}(?P<suffix>.*)')
 
 # Attempts to parse the given value as a regex.
 # If the value is a valid regex, return (True, parsed_regex).
@@ -64,7 +67,7 @@ def try_parse_regex(value):
     logging.debug(f'Cannot parse regex {value} - {e}')
     return (False, None)
 
-def try_parse_interpolation(value):
+def try_parse_template(value):
   match = template_value_pattern.match(value)
   if None == match:
     return (False, None)
@@ -73,6 +76,18 @@ def try_parse_interpolation(value):
   template_value_key = match.group('key')
   return (True, (template_value_type, template_value_key))
 
+def try_parse_interpolation(value):
+  match = interpolation_value_pattern.match(value)
+  if None == match:
+    return (False, None)
+  
+  prefix = match.group('prefix')
+  user_type = match.group('type')
+  trait_key = match.group('key')
+  suffix = match.group('suffix')
+  return (True, (prefix, user_type, trait_key, suffix))
+
+
 def is_template_value(value):
   is_interpolation, parsed_value = try_parse_interpolation(value)
   return is_interpolation
@@ -80,6 +95,10 @@ def is_template_value(value):
 def parse_constraint(value):
   if '*' == value:
     return (ValueType.MATCH_ANY, value)
+  
+  is_template, parsed_value = try_parse_template(value)
+  if is_template:
+    return (ValueType.TEMPLATE, parsed_value)
   
   is_interpolation, parsed_value = try_parse_interpolation(value)
   if is_interpolation:
@@ -194,21 +213,39 @@ def regex_to_z3_expr(regex):
 #
 def matches_value(labels, key, value):
   constraint_type, parsed_value = parse_constraint(value)
+  # 'key' : '*'
   if ValueType.MATCH_ANY == constraint_type:
     return BoolVal(True)
+  # 'key' : 'value'
   elif ValueType.STRING == constraint_type:
     return labels(key) == StringVal(parsed_value)
+  # 'key' : '(ab)*a
   elif ValueType.REGEX == constraint_type:
     logging.debug(f'Uncompiled regex {parsed_value}')
     regex = regex_to_z3_expr(parsed_value)
     logging.debug(f'Compiled regex {regex}')
     return InRe(labels(key), regex)
-  elif ValueType.INTERPOLATION == constraint_type:
+  # 'key' : '{internal.trait_key}'
+  elif ValueType.TEMPLATE == constraint_type:
     user_trait_type, user_trait_key = parsed_value
     logging.debug(f'User trait constraint of type {user_trait_type} on key {user_trait_key}')
     user_trait_type = template_types[user_trait_type]
     user_trait_key = StringVal(user_trait_key)
-    return IsMember(labels(key), user_trait_type(user_trait_key))
+    user_trait_values = user_trait_type(user_trait_key)
+    return IsMember(labels(key), user_trait_values)
+  # 'key' : 'prefix#{internal.trait_key}#suffix'
+  elif ValueType.INTERPOLATION == constraint_type:
+    prefix, user_trait_type, user_trait_key, suffix = parsed_value
+    logging.debug(f'User interpolation constraint of type {user_trait_type} on key {user_trait_key} with prefix {prefix} and suffix {suffix}')
+    prefix = StringVal(prefix)
+    suffix = StringVal(suffix)
+    user_trait_type = template_types[user_trait_type]
+    user_trait_key = StringVal(user_trait_key)
+    user_trait_values = user_trait_type(user_trait_key)
+    user_trait_value = String(f'{user_trait_type}_{user_trait_key}')
+    expr = IsMember(user_trait_value, user_trait_values)
+    expr = And(expr, labels(key) == Concat(prefix, user_trait_value, suffix))
+    return Exists(user_trait_value, expr)
   elif ValueType.FUNCTION == constraint_type:
     quit(red('Function constraints not yet supported'))
   else:
