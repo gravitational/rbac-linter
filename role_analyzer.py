@@ -278,6 +278,8 @@ def labels_as_z3_map(labels, constraint_type):
   logging.debug(f'Compiling labels {labels} of type {constraint_type.name}')
   return And([constraint_type.value(StringVal(key)) == StringVal(value) for key, value in labels.items()])
 
+# Compiles the traits of a given internal or external user into a form
+# understood by Z3 that can be checked against a compiled set of role constraints.
 def traits_as_z3_map(traits, user_type):
   logging.debug(f'Compiling user traits {traits} of type {user_type.name}')
-  return And([user_type.value(StringVal(key)) == value for key, values in traits.items() for value in values])
+  return And([user_type.value(StringVal(key)) == StringVal(value) for key, values in traits.items() for value in values])
