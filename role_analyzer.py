@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import Enum, auto
 import logging
 import re
 import sre_parse
@@ -28,8 +28,8 @@ class ConstraintType(Enum):
   DATABASE = db_labels
 
 # Z3 User Constants
-internal_traits = Function('internal_traits', StringSort(), StringSort())
-external_traits = Function('external_traits', StringSort(), StringSort())
+internal_traits = Function('internal_traits', StringSort(), SetSort(StringSort()))
+external_traits = Function('external_traits', StringSort(), SetSort(StringSort()))
 template_types = {
   'internal'  : internal_traits,
   'external'  : external_traits
@@ -38,28 +38,58 @@ class UserType(Enum):
   INTERNAL = internal_traits
   EXTERNAL = external_traits
 
+class ValueType(Enum):
+  MATCH_ANY = auto()
+  STRING = auto()
+  REGEX = auto()
+  INTERPOLATION = auto()
+  FUNCTION = auto()
+
 # Regex pattern for {{internal:logins}} or {{external:email}} type template values.
 template_value_pattern = re.compile('\{\{(?P<type>internal|external)\.(?P<key>[\w]+)\}\}')
 
-# Determines whether the given constraint value is a template value.
-def is_template_value(value):
-  return template_value_pattern.match(value) != None
+# Attempts to parse the given value as a regex.
+# If the value is a valid regex, return (True, parsed_regex).
+# If the value can just be treated as a normal string (example 'ababab')
+# then return (False, None) so we can use regular string comparison.
+# If the value is not a valid regex return (False, None).
+def try_parse_regex(value):
+  try:
+    parsed_regex = sre_parse.parse(value)
+    if not all([sre_parse.LITERAL == node_type for node_type, _ in parsed_regex]):
+      return (True, parsed_regex)
+    else:
+      return (False, None)
+  except Exception as e:
+    logging.debug(f'Cannot parse regex {value} - {e}')
+    return (False, None)
 
-# Parses the template value into an expression over a user traits constant.
-def template_value(value):
+def try_parse_interpolation(value):
   match = template_value_pattern.match(value)
+  if None == match:
+    return (False, None)
+  
   template_value_type = match.group('type')
   template_value_key = match.group('key')
-  logging.debug(f'Template constraint of type {template_value_type} on key {template_value_key}')
-  template_value_type = template_types[template_value_type]
-  template_value_key = StringVal(template_value_key)
-  return template_value_type(template_value_key)
+  return (True, (template_value_type, template_value_key))
 
-# Tests whether the given regex can just be treated as a string.
-# For example, we can use normal string comparison for 'ababab' instead of
-# the presumably less-efficient regular expression solver.
-def is_regex(parsed_regex):
-  return not all([sre_parse.LITERAL == node_type for node_type, _ in parsed_regex])
+def is_template_value(value):
+  is_interpolation, parsed_value = try_parse_interpolation(value)
+  return is_interpolation
+
+def parse_constraint(value):
+  if '*' == value:
+    return (ValueType.MATCH_ANY, value)
+  
+  is_interpolation, parsed_value = try_parse_interpolation(value)
+  if is_interpolation:
+    return (ValueType.INTERPOLATION, parsed_value)
+  
+  is_regex, parsed_regex = try_parse_regex(value)
+  if is_regex:
+    return (ValueType.REGEX, parsed_regex)
+  
+  return (ValueType.STRING, value)
 
 # The Z3 regex matching all strings accepted by re1 but not re2.
 # Formatted in camelcase to mimic Z3 regex API.
@@ -156,32 +186,33 @@ def regex_to_z3_expr(regex):
     return Concat([regex_construct_to_z3_expr(construct) for construct in regex])
 
 # Constructs an expression evaluating whether a specific label constraint
-# is satisfied by a given node, database, or k8s cluster; constraint must
-# be either a concrete string value or a regex.
+# is satisfied by a given node, database, or k8s cluster.
 # Example value for key : value parameters:
 #
 # 'location' : 'us-east-[\d]+'
 # 'owner' : {{external.email}}
 #
 def matches_value(labels, key, value):
-  if '*' == value:
-    return True
-
-  if is_template_value(value):
-    return labels(key) == template_value(value)
-
-  try:
-    parsed_regex = sre_parse.parse(value)
-  except Exception as e:
-    quit(red(f'ERROR: cannot parse regex {value} - {e}'))
-
-  if is_regex(parsed_regex):
-    logging.debug(f'Uncompiled regex {parsed_regex}')
-    regex = regex_to_z3_expr(parsed_regex)
+  constraint_type, parsed_value = parse_constraint(value)
+  if ValueType.MATCH_ANY == constraint_type:
+    return BoolVal(True)
+  elif ValueType.STRING == constraint_type:
+    return labels(key) == StringVal(parsed_value)
+  elif ValueType.REGEX == constraint_type:
+    logging.debug(f'Uncompiled regex {parsed_value}')
+    regex = regex_to_z3_expr(parsed_value)
     logging.debug(f'Compiled regex {regex}')
     return InRe(labels(key), regex)
+  elif ValueType.INTERPOLATION == constraint_type:
+    user_trait_type, user_trait_key = parsed_value
+    logging.debug(f'User trait constraint of type {user_trait_type} on key {user_trait_key}')
+    user_trait_type = template_types[user_trait_type]
+    user_trait_key = StringVal(user_trait_key)
+    return IsMember(labels(key), user_trait_type(user_trait_key))
+  elif ValueType.FUNCTION == constraint_type:
+    quit(red('Function constraints not yet supported'))
   else:
-    return labels(key) == StringVal(value)
+    quit(red('Not supported.'))
 
 # Constructs an expression evaluating whether a specific label constraint
 # is satisfied by a given node, database, or k8s cluster; constraint can
@@ -282,4 +313,5 @@ def labels_as_z3_map(labels, constraint_type):
 # understood by Z3 that can be checked against a compiled set of role constraints.
 def traits_as_z3_map(traits, user_type):
   logging.debug(f'Compiling user traits {traits} of type {user_type.name}')
-  return And([user_type.value(StringVal(key)) == StringVal(value) for key, values in traits.items() for value in values])
+  if UserType.INTERNAL == user_type:
+    return And([IsMember(StringVal(value), user_type.value(StringVal(key))) for key, values in traits.items() for value in values])

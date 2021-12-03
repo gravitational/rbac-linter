@@ -7,10 +7,8 @@ spec:
     node_labels:
       'env'   : 'aa*'
       'owner' : '{{internal.key2}}'
-      'fooba' : 'asdf'
+      'foobar' : 'asdf'
 
   deny:
     node_labels:
-      # multiple labels are interpreted as an "or" operation.  in this case
-      # Teleport will deny access to any node labeled as 'database' or 'backup'
       'workload': ['database', 'backup']

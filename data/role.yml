@@ -7,7 +7,7 @@ spec:
     node_labels:
       'env'   : 'a*a'
       'owner' : '{{internal.key1}}'
-      'fooba' : 'asdf'
+      'foobar' : 'asdf'
 
   deny:
     node_labels:

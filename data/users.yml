@@ -19,6 +19,7 @@ spec:
   traits:
     logins:
     - ahelwer
+    - root
     name:
     - ahelwer
 version: v2
@@ -49,4 +50,5 @@ spec:
     - ""
     logins:
     - azureuser
+    - root
 version: v2
