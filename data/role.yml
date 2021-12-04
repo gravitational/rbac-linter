@@ -6,7 +6,7 @@ spec:
   allow:
     node_labels:
       'env'   : 'a*a'
-      'owner' : 'foo#{{internal.key1}}#barasdf'
+      'owner' : '{{regexp.replace(   external.email  ,   "foo"  ,   "bar"   )}}'
       'foobar' : 'asdf'
 
   deny:

@@ -38,19 +38,6 @@ class UserType(Enum):
   INTERNAL = internal_traits
   EXTERNAL = external_traits
 
-class ValueType(Enum):
-  MATCH_ANY = auto()
-  STRING = auto()
-  REGEX = auto()
-  TEMPLATE = auto()
-  INTERPOLATION = auto()
-  FUNCTION = auto()
-
-# Regex pattern for {{internal.logins}} or {{external.email}} type template values.
-template_value_pattern = re.compile('\{\{(?P<type>internal|external)\.(?P<key>[\w]+)\}\}')
-# Regex pattern for IAM#{{internal.logins}}#user type interpolation values.
-interpolation_value_pattern = re.compile('(?P<prefix>.*)\{\{(?P<type>internal|external)\.(?P<key>[\w]+)\}\}(?P<suffix>.*)')
-
 # Attempts to parse the given value as a regex.
 # If the value is a valid regex, return (True, parsed_regex).
 # If the value can just be treated as a normal string (example 'ababab')
@@ -67,6 +54,10 @@ def try_parse_regex(value):
     logging.debug(f'Cannot parse regex {value} - {e}')
     return (False, None)
 
+# Regex pattern for {{internal.logins}} or {{external.email}} type template values.
+template_value_pattern = re.compile('\{\{(?P<type>internal|external)\.(?P<key>[\w]+)\}\}')
+
+# Attempts to parse template constraints of type {{internal.logins}}
 def try_parse_template(value):
   match = template_value_pattern.match(value)
   if None == match:
@@ -76,6 +67,10 @@ def try_parse_template(value):
   template_value_key = match.group('key')
   return (True, (template_value_type, template_value_key))
 
+# Regex pattern for IAM#{{internal.logins}}#user type interpolation values.
+interpolation_value_pattern = re.compile('(?P<prefix>.*)\{\{(?P<type>internal|external)\.(?P<key>[\w]+)\}\}(?P<suffix>.*)')
+
+# Attempts to parse interpolation constraints of type IAM#{external.foo}
 def try_parse_interpolation(value):
   match = interpolation_value_pattern.match(value)
   if None == match:
@@ -87,11 +82,53 @@ def try_parse_interpolation(value):
   suffix = match.group('suffix')
   return (True, (prefix, user_type, trait_key, suffix))
 
+# Regex pattern for {{email.local(external.email)}}
+email_function_value_pattern = re.compile('\{\{email\.local\([\s]*(?P<type>internal|external)\.(?P<key>[\w]+)[\s]*\)\}\}')
 
+# Attempts to parse email function contraints of type {{email.local(external.email)}}
+def try_parse_email_function(value):
+  match = email_function_value_pattern.match(value)
+  if None == match:
+    return (False, None)
+
+  user_type = match.group('type')
+  trait_key = match.group('key')
+  return (True, (user_type, trait_key))
+
+# Regex pattern for {{regexp.replace(external.access["env"], "^(staging)$", "$1")}}
+regex_function_value_pattern = re.compile('\{\{regexp\.replace\([\s]*(?P<type>internal|external)\.(?P<key>[\w]+)[\s]*,[\s]*"(?P<pattern>.*)"[\s]*,[\s]*"(?P<replace>.*)"[\s]*\)\}\}')
+
+# Attempts to parse regexp replace function constraints of type {{regexp.replace(external.access, "foo", "bar")}}
+def try_parse_regexp_replace_function(value):
+  match = regex_function_value_pattern.match(value)
+  if None == match:
+    return (False, None)
+
+  user_type = match.group('type')
+  trait_key = match.group('key')
+  pattern = match.group('pattern')
+  replace = match.group('replace')
+  return (True, (user_type, trait_key, pattern, replace))
+
+# Determines whether the given constraint requires user traits to specify.
 def is_template_value(value):
-  is_interpolation, parsed_value = try_parse_interpolation(value)
-  return is_interpolation
+  is_template, _ = try_parse_template(value)
+  is_interpolation, _ = try_parse_interpolation(value)
+  is_email_function, _ = try_parse_email_function(value)
+  is_regexp_replace_function, _ = try_parse_regexp_replace_function(value)
+  return is_template or is_interpolation or is_email_function or is_regexp_replace_function
 
+# Possible types of constraint values.
+class ValueType(Enum):
+  MATCH_ANY = auto()
+  STRING = auto()
+  REGEX = auto()
+  TEMPLATE = auto()
+  INTERPOLATION = auto()
+  EMAIL_FUNCTION = auto()
+  REGEXP_REPLACE_FUNCTION = auto()
+
+# Determines the category of the constraint value and parses it appropriately.
 def parse_constraint(value):
   if '*' == value:
     return (ValueType.MATCH_ANY, value)
@@ -103,6 +140,14 @@ def parse_constraint(value):
   is_interpolation, parsed_value = try_parse_interpolation(value)
   if is_interpolation:
     return (ValueType.INTERPOLATION, parsed_value)
+  
+  is_email_function, parsed_value = try_parse_email_function(value)
+  if is_email_function:
+    return (ValueType.EMAIL_FUNCTION, parsed_value)
+
+  is_regexp_replace_function, parsed_value = try_parse_regexp_replace_function(value)
+  if is_regexp_replace_function:
+    return (ValueType.REGEXP_REPLACE_FUNCTION, parsed_value)
   
   is_regex, parsed_regex = try_parse_regex(value)
   if is_regex:
@@ -246,10 +291,17 @@ def matches_value(labels, key, value):
     expr = IsMember(user_trait_value, user_trait_values)
     expr = And(expr, labels(key) == Concat(prefix, user_trait_value, suffix))
     return Exists(user_trait_value, expr)
-  elif ValueType.FUNCTION == constraint_type:
-    quit(red('Function constraints not yet supported'))
+  # 'key' : '{{email.local(external.email)}}'
+  elif ValueType.EMAIL_FUNCTION == constraint_type:
+    user_trait_type, user_trait_key = parsed_value
+    logging.debug(f'Email function constraint of type {user_trait_type} on key {user_trait_key}')
+    quit(red(f'Email function constraint not yet supported given {key} : {value}'))
+  elif ValueType.REGEXP_REPLACE_FUNCTION == constraint_type:
+    user_trait_type, user_trait_key, pattern, replace = parsed_value
+    logging.debug(f'Regexp replace function constraint of type {user_trait_type} on key {user_trait_key}, replacing {pattern} with {replace}')
+    quit(red(f'Regexp replace function constraint not yet supported given {key} : {value}'))
   else:
-    quit(red('Not supported.'))
+    quit(red(f'Unknown constraint value type {value}; not supported.'))
 
 # Constructs an expression evaluating whether a specific label constraint
 # is satisfied by a given node, database, or k8s cluster; constraint can
@@ -352,3 +404,4 @@ def traits_as_z3_map(traits, user_type):
   logging.debug(f'Compiling user traits {traits} of type {user_type.name}')
   if UserType.INTERNAL == user_type:
     return And([IsMember(StringVal(value), user_type.value(StringVal(key))) for key, values in traits.items() for value in values])
+  
