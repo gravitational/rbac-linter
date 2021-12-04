@@ -4,7 +4,7 @@ from role_analyzer import allows
 import yaml
 from z3 import *
 
-def test_equivalence(r1, r2):
+def roles_are_equivalent(r1, r2):
   r1 = allows(r1)
   r2 = allows(r2)
   s = Solver()
@@ -12,11 +12,14 @@ def test_equivalence(r1, r2):
   result = s.check()
   if unsat == result:
     print('Roles are equivalent.')
+    return True
   elif sat == result:
     print('Roles are not equivalent; counterexample:')
     print(s.model())
+    return False
   else:
     print(result)
+    return False
 
 parser = argparse.ArgumentParser(description='Check two roles for equivalence.')
 parser.add_argument('first', metavar='FIRST', type=str, help='Path to the first role\'s yaml file')
@@ -33,6 +36,7 @@ with (
   try:
     r1 = yaml.safe_load(r1)
     r2 = yaml.safe_load(r2)
-    test_equivalence(r1, r2)
+    #exit(0 if roles_are_equivalent(r1, r2) else 1)
+    roles_are_equivalent(r1, r2)
   except yaml.YAMLError as e:
     print(e)

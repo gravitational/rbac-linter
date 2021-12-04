@@ -41,21 +41,22 @@ class TestRegexSolver(unittest.TestCase):
       s.pop()
     
     # Triple each side of the regex and check for equivalence again
-    for regex in regexes:
-      first, second = regex
-      first = first + first + first
-      second = second + second + second
-      first_parsed = sre_parse.parse(first)
-      second_parsed = sre_parse.parse(second)
-      # Ensure we're testing the Z3 regex engine, not just the regex parser
-      self.assertNotEqual(list(first_parsed), list(second_parsed), regex)
-      s.push()
-      first_expr = regex_to_z3_expr(first_parsed)
-      second_expr = regex_to_z3_expr(second_parsed)
-      s.add(Distinct(first_expr, second_expr))
-      result = s.check()
-      model = s.model() if sat == result else 'NO_MODEL'
-      self.assertEqual(unsat, result, f'{regex} : {model}')
-      s.pop()
+    # Temporarily removing this due to https://github.com/Z3Prover/z3/issues/5693
+    #for regex in regexes:
+    #  first, second = regex
+    #  first = first + first + first
+    #  second = second + second + second
+    #  first_parsed = sre_parse.parse(first)
+    #  second_parsed = sre_parse.parse(second)
+    #  # Ensure we're testing the Z3 regex engine, not just the regex parser
+    #  self.assertNotEqual(list(first_parsed), list(second_parsed), regex)
+    #  s.push()
+    #  first_expr = regex_to_z3_expr(first_parsed)
+    #  second_expr = regex_to_z3_expr(second_parsed)
+    #  s.add(Distinct(first_expr, second_expr))
+    #  result = s.check()
+    #  model = s.model() if sat == result else 'NO_MODEL'
+    #  self.assertEqual(unsat, result, f'{(first, second)} : {model}')
+    #  s.pop()
       
 unittest.main()

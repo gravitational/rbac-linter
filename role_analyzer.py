@@ -55,7 +55,7 @@ def try_parse_regex(value):
     return (False, None)
 
 # Regex pattern for {{internal.logins}} or {{external.email}} type template values.
-template_value_pattern = re.compile('\{\{(?P<type>internal|external)\.(?P<key>[\w]+)(?P<inner_key>\["[\w]+"\])\}\}')
+template_value_pattern = re.compile('\{\{(?P<type>internal|external)\.(?P<key>[\w]+)(?P<inner_key>\["[\w]+"\])?\}\}')
 
 # Attempts to parse template constraints of type {{internal.logins}}
 def try_parse_template(value):
@@ -72,7 +72,7 @@ def try_parse_template(value):
   return (True, (user_type, trait_key))
 
 # Regex pattern for IAM#{{internal.logins}}#user type interpolation values.
-interpolation_value_pattern = re.compile('(?P<prefix>.*)\{\{(?P<type>internal|external)\.(?P<key>[\w]+)(?P<inner_key>\["[\w]+"\])\}\}(?P<suffix>.*)')
+interpolation_value_pattern = re.compile('(?P<prefix>.*)\{\{(?P<type>internal|external)\.(?P<key>[\w]+)(?P<inner_key>\["[\w]+"\])?\}\}(?P<suffix>.*)')
 
 # Attempts to parse interpolation constraints of type IAM#{external.foo}
 def try_parse_interpolation(value):
@@ -91,7 +91,7 @@ def try_parse_interpolation(value):
   return (True, (prefix, user_type, trait_key, suffix))
 
 # Regex pattern for {{email.local(external.email)}}
-email_function_value_pattern = re.compile('\{\{email\.local\([\s]*(?P<type>internal|external)\.(?P<key>[\w]+)(?P<inner_key>\["[\w]+"\])[\s]*\)\}\}')
+email_function_value_pattern = re.compile('\{\{email\.local\([\s]*(?P<type>internal|external)\.(?P<key>[\w]+)(?P<inner_key>\["[\w]+"\])?[\s]*\)\}\}')
 
 # Attempts to parse email function contraints of type {{email.local(external.email)}}
 def try_parse_email_function(value):
@@ -108,7 +108,7 @@ def try_parse_email_function(value):
   return (True, (user_type, trait_key))
 
 # Regex pattern for {{regexp.replace(external.access["env"], "^(staging)$", "$1")}}
-regex_function_value_pattern = re.compile('\{\{regexp\.replace\([\s]*(?P<type>internal|external)\.(?P<key>[\w]+)(?P<inner_key>\["[\w]+"\])[\s]*,[\s]*"(?P<pattern>.*)"[\s]*,[\s]*"(?P<replace>.*)"[\s]*\)\}\}')
+regex_function_value_pattern = re.compile('\{\{regexp\.replace\([\s]*(?P<type>internal|external)\.(?P<key>[\w]+)(?P<inner_key>\["[\w]+"\])?[\s]*,[\s]*"(?P<pattern>.*)"[\s]*,[\s]*"(?P<replace>.*)"[\s]*\)\}\}')
 
 # Attempts to parse regexp replace function constraints of type {{regexp.replace(external.access, "foo", "bar")}}
 def try_parse_regexp_replace_function(value):

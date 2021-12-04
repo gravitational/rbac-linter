@@ -6,8 +6,8 @@ spec:
   allow:
     node_labels:
       'env'   : 'a*a'
-      'owner' : '{{internal.key["foo"]}}'
-      'foobar' : 'asdf'
+      'owner' : 'foo#{{internal.key1}}#bar'
+      'foobar' : 'asdff'
 
   deny:
     node_labels:
