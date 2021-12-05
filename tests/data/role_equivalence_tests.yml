@@ -1,0 +1,68 @@
+test-name: List of string literals
+first-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role1
+  spec:
+    allow:
+      node_labels:
+        'key' : ['value1', 'value2']
+    deny:
+      node_labels:
+        'key' : 'value2'
+second-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role2
+  spec:
+    allow:
+      node_labels:
+        'key' : 'value1'
+are-equivalent: True
+---
+test-name: Basic regular expressions
+first-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role1
+  spec:
+    allow:
+      kubernetes_labels:
+        'key' : 'aa*'
+second-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role2
+  spec:
+    allow:
+      kubernetes_labels:
+        'key' : 'a*a'
+are-equivalent: True
+---
+test-name: Unicode string constraints
+first-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role1
+  spec:
+    allow:
+      app_labels:
+        '鑰匙' : ['∀', '∃']
+    deny:
+      app_labels:
+        '鑰匙' : '∃'
+second-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role2
+  spec:
+    allow:
+      app_labels:
+        '鑰匙' : '∀'
+are-equivalent: True

@@ -423,5 +423,5 @@ def labels_as_z3_map(labels, constraint_type):
 def traits_as_z3_map(traits, user_type):
   logging.debug(f'Compiling user traits {traits} of type {user_type.name}')
   if UserType.INTERNAL == user_type:
-    return And([IsMember(StringVal(value), user_type.value(StringVal(key))) for key, values in traits.items() for value in values])
+    return And([user_type.value(StringVal(key), (StringVal(value))) for key, values in traits.items() for value in values])
   

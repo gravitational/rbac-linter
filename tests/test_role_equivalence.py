@@ -1,0 +1,20 @@
+import os
+import pytest
+from role_equivalence_check import roles_are_equivalent
+import yaml
+
+@pytest.fixture
+def change_test_dir(request):
+    os.chdir(request.fspath.dirname)
+    yield
+    os.chdir(request.config.invocation_dir)
+
+def test_roles_are_equivalent(change_test_dir):
+  with open('data/role_equivalence_tests.yml', 'r') as tests:
+    tests = [yaml.safe_load(test) for test in tests.read().split('---')]
+    for test in tests:
+      test_name = test['test-name']
+      r1 = test['first-role']
+      r2 = test['second-role']
+      are_equivalent = test['are-equivalent']
+      assert are_equivalent == roles_are_equivalent(r1, r2), test_name

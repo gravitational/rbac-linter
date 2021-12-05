@@ -1,5 +1,4 @@
 from role_analyzer import requires_user_traits, parse_constraint, ValueType
-import sre_parse
 
 def parse_match_any_constraint():
   unparsed = '*'
@@ -99,7 +98,7 @@ def test_parse_regex_constraint():
     assert ValueType.REGEX == constraint_type, unparsed
 
 def test_parse_string_constraint():
-  values = ['foo', 'bar', 'baz', 'foobar']
+  values = ['foo', 'bar', 'baz', 'foobar', '鑰匙', '∀∃']
   
   for unparsed in values:
     expected = unparsed
