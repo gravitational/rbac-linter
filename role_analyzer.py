@@ -65,7 +65,7 @@ def try_parse_regex(value):
     return (False, None)
 
 # Regex pattern for {{internal.logins}} or {{external.email}} type template values.
-template_value_pattern = re.compile(r'\{\{(?P<type>internal|external)\.(?P<key>[\w]+)(?P<inner_key>\["[\w]+"\])?\}\}')
+template_value_pattern = re.compile(r'\{\{(?P<type>internal|external)\.(?P<key>[\w]+)(\["(?P<inner_key>[\w]+)"\])?\}\}')
 
 # Attempts to parse template constraints of type {{internal.logins}}
 def try_parse_template(value):
@@ -76,13 +76,11 @@ def try_parse_template(value):
   user_type = match.group('type')
   trait_key = match.group('key')
   inner_trait_key = match.group('inner_key')
-  if None != inner_trait_key:
-    quit(red(f'Nested trait maps are not supported: {value}'))
 
-  return (True, (user_type, trait_key))
+  return (True, (user_type, trait_key, inner_trait_key))
 
 # Regex pattern for IAM#{{internal.logins}}#user type interpolation values.
-interpolation_value_pattern = re.compile(r'(?P<prefix>.*)\{\{(?P<type>internal|external)\.(?P<key>[\w]+)(?P<inner_key>\["[\w]+"\])?\}\}(?P<suffix>.*)')
+interpolation_value_pattern = re.compile(r'(?P<prefix>.*)\{\{(?P<type>internal|external)\.(?P<key>[\w]+)(\["(?P<inner_key>[\w]+)"\])?\}\}(?P<suffix>.*)')
 
 # Attempts to parse interpolation constraints of type IAM#{external.foo}
 def try_parse_interpolation(value):
@@ -95,13 +93,11 @@ def try_parse_interpolation(value):
   trait_key = match.group('key')
   suffix = match.group('suffix')
   inner_trait_key = match.group('inner_key')
-  if None != inner_trait_key:
-    quit(red(f'Nested trait maps are not supported: {value}'))
 
-  return (True, (prefix, user_type, trait_key, suffix))
+  return (True, (prefix, user_type, trait_key, inner_trait_key, suffix))
 
 # Regex pattern for {{email.local(external.email)}}
-email_function_value_pattern = re.compile(r'\{\{email\.local\([\s]*(?P<type>internal|external)\.(?P<key>[\w]+)(?P<inner_key>\["[\w]+"\])?[\s]*\)\}\}')
+email_function_value_pattern = re.compile(r'\{\{email\.local\([\s]*(?P<type>internal|external)\.(?P<key>[\w]+)(\["(?P<inner_key>[\w]+)"\])?[\s]*\)\}\}')
 
 # Attempts to parse email function contraints of type {{email.local(external.email)}}
 def try_parse_email_function(value):
@@ -112,13 +108,11 @@ def try_parse_email_function(value):
   user_type = match.group('type')
   trait_key = match.group('key')
   inner_trait_key = match.group('inner_key')
-  if None != inner_trait_key:
-    quit(red(f'Nested trait maps are not supported: {value}'))
 
-  return (True, (user_type, trait_key))
+  return (True, (user_type, trait_key, inner_trait_key))
 
 # Regex pattern for {{regexp.replace(external.access["env"], "^(staging)$", "$1")}}
-regex_function_value_pattern = re.compile(r'\{\{regexp\.replace\([\s]*(?P<type>internal|external)\.(?P<key>[\w]+)(?P<inner_key>\["[\w]+"\])?[\s]*,[\s]*"(?P<pattern>.*)"[\s]*,[\s]*"(?P<replace>.*)"[\s]*\)\}\}')
+regex_function_value_pattern = re.compile(r'\{\{regexp\.replace\([\s]*(?P<type>internal|external)\.(?P<key>[\w]+)(\["(?P<inner_key>[\w]+)"\])?[\s]*,[\s]*"(?P<pattern>.*)"[\s]*,[\s]*"(?P<replace>.*)"[\s]*\)\}\}')
 
 # Attempts to parse regexp replace function constraints of type {{regexp.replace(external.access, "foo", "bar")}}
 def try_parse_regexp_replace_function(value):
@@ -131,13 +125,11 @@ def try_parse_regexp_replace_function(value):
   pattern = match.group('pattern')
   replace = match.group('replace')
   inner_trait_key = match.group('inner_key')
-  if None != inner_trait_key:
-    quit(red(f'Nested trait maps are not supported: {value}'))
 
-  return (True, (user_type, trait_key, pattern, replace))
+  return (True, (user_type, trait_key, inner_trait_key, pattern, replace))
 
 # Determines whether the given constraint requires user traits to specify.
-def is_template_value(value):
+def requires_user_traits(value):
   is_template, _ = try_parse_template(value)
   is_interpolation, _ = try_parse_interpolation(value)
   is_email_function, _ = try_parse_email_function(value)
@@ -298,15 +290,19 @@ def matches_value(labels, key, value):
     return InRe(labels(key), regex)
   # 'key' : '{internal.trait_key}'
   elif ValueType.TEMPLATE == constraint_type:
-    user_trait_type, user_trait_key = parsed_value
-    logging.debug(f'User trait constraint of type {user_trait_type} on key {user_trait_key}')
+    user_trait_type, user_trait_key, inner_trait_key = parsed_value
+    logging.debug(f'User trait constraint of type {user_trait_type} on key {user_trait_key}[{inner_trait_key}]')
+    if None != inner_trait_key:
+      quit(red(f'Nested trait maps are not supported: {value}'))
     user_trait_type = template_types[user_trait_type]
     user_trait_key = StringVal(user_trait_key)
     return user_trait_type(user_trait_key, labels(key))
   # 'key' : 'prefix#{internal.trait_key}#suffix'
   elif ValueType.INTERPOLATION == constraint_type:
-    prefix, user_trait_type, user_trait_key, suffix = parsed_value
-    logging.debug(f'User interpolation constraint of type {user_trait_type} on key {user_trait_key} with prefix {prefix} and suffix {suffix}')
+    prefix, user_trait_type, user_trait_key, inner_trait_key, suffix = parsed_value
+    logging.debug(f'User interpolation constraint of type {user_trait_type} on key {user_trait_key}[{inner_trait_key}] with prefix {prefix} and suffix {suffix}')
+    if None != inner_trait_key:
+      quit(red(f'Nested trait maps are not supported: {value}'))
     prefix = StringVal(prefix)
     suffix = StringVal(suffix)
     user_trait_type = template_types[user_trait_type]
@@ -317,12 +313,12 @@ def matches_value(labels, key, value):
     return Exists(user_trait_value, expr)
   # 'key' : '{{email.local(external.email)}}'
   elif ValueType.EMAIL_FUNCTION == constraint_type:
-    user_trait_type, user_trait_key = parsed_value
-    logging.debug(f'Email function constraint of type {user_trait_type} on key {user_trait_key}')
+    user_trait_type, user_trait_key, inner_trait_key = parsed_value
+    logging.debug(f'Email function constraint of type {user_trait_type} on key {user_trait_key}[{inner_trait_key}]')
     quit(red(f'Email function constraint not yet supported given {key} : {value}'))
   elif ValueType.REGEXP_REPLACE_FUNCTION == constraint_type:
-    user_trait_type, user_trait_key, pattern, replace = parsed_value
-    logging.debug(f'Regexp replace function constraint of type {user_trait_type} on key {user_trait_key}, replacing {pattern} with {replace}')
+    user_trait_type, user_trait_key, inner_trait_key, pattern, replace = parsed_value
+    logging.debug(f'Regexp replace function constraint of type {user_trait_type} on key {user_trait_key}[{inner_trait_key}], replacing {pattern} with {replace}')
     quit(red(f'Regexp replace function constraint not yet supported given {key} : {value}'))
   else:
     quit(red(f'Unknown constraint value type {value}; not supported.'))
@@ -409,10 +405,10 @@ def is_role_template(role):
   spec = role['spec']
   allow = spec['allow']
   groups = [allow[constraint_type].values() for constraint_type in constraint_types.keys() if constraint_type in allow]
-  any_template_values_in_allow = any([is_template_value(value) for values in groups for value in values])
+  any_template_values_in_allow = any([requires_user_traits(value) for values in groups for value in values])
   deny = spec['deny']
   groups = [deny[constraint_type] for constraint_type in constraint_types.keys() if constraint_type in deny]
-  any_template_values_in_deny = any([is_template_value(value) for values in groups for value in values])
+  any_template_values_in_deny = any([requires_user_traits(value) for values in groups for value in values])
   return any_template_values_in_allow or any_template_values_in_deny
 
 # Compiles the labels of a given node, k8s cluster, or database into a

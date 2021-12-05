@@ -1,5 +1,4 @@
 import sre_parse
-import unittest
 from z3 import *
 from role_analyzer import regex_to_z3_expr
 
