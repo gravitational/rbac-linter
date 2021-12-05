@@ -28,8 +28,18 @@ class ConstraintType(Enum):
   DATABASE = db_labels
 
 # Z3 User Constants
-internal_traits = Function('internal_traits', StringSort(), SetSort(StringSort()))
-external_traits = Function('external_traits', StringSort(), SetSort(StringSort()))
+internal_traits = Function(
+  'internal_traits',
+  StringSort(),
+  StringSort(),
+  BoolSort()
+)
+external_traits = Function(
+  'external_traits',
+  StringSort(),
+  StringSort(),
+  BoolSort()
+)
 template_types = {
   'internal'  : internal_traits,
   'external'  : external_traits
@@ -55,7 +65,7 @@ def try_parse_regex(value):
     return (False, None)
 
 # Regex pattern for {{internal.logins}} or {{external.email}} type template values.
-template_value_pattern = re.compile('\{\{(?P<type>internal|external)\.(?P<key>[\w]+)(?P<inner_key>\["[\w]+"\])?\}\}')
+template_value_pattern = re.compile(r'\{\{(?P<type>internal|external)\.(?P<key>[\w]+)(?P<inner_key>\["[\w]+"\])?\}\}')
 
 # Attempts to parse template constraints of type {{internal.logins}}
 def try_parse_template(value):
@@ -72,7 +82,7 @@ def try_parse_template(value):
   return (True, (user_type, trait_key))
 
 # Regex pattern for IAM#{{internal.logins}}#user type interpolation values.
-interpolation_value_pattern = re.compile('(?P<prefix>.*)\{\{(?P<type>internal|external)\.(?P<key>[\w]+)(?P<inner_key>\["[\w]+"\])?\}\}(?P<suffix>.*)')
+interpolation_value_pattern = re.compile(r'(?P<prefix>.*)\{\{(?P<type>internal|external)\.(?P<key>[\w]+)(?P<inner_key>\["[\w]+"\])?\}\}(?P<suffix>.*)')
 
 # Attempts to parse interpolation constraints of type IAM#{external.foo}
 def try_parse_interpolation(value):
@@ -91,7 +101,7 @@ def try_parse_interpolation(value):
   return (True, (prefix, user_type, trait_key, suffix))
 
 # Regex pattern for {{email.local(external.email)}}
-email_function_value_pattern = re.compile('\{\{email\.local\([\s]*(?P<type>internal|external)\.(?P<key>[\w]+)(?P<inner_key>\["[\w]+"\])?[\s]*\)\}\}')
+email_function_value_pattern = re.compile(r'\{\{email\.local\([\s]*(?P<type>internal|external)\.(?P<key>[\w]+)(?P<inner_key>\["[\w]+"\])?[\s]*\)\}\}')
 
 # Attempts to parse email function contraints of type {{email.local(external.email)}}
 def try_parse_email_function(value):
@@ -108,7 +118,7 @@ def try_parse_email_function(value):
   return (True, (user_type, trait_key))
 
 # Regex pattern for {{regexp.replace(external.access["env"], "^(staging)$", "$1")}}
-regex_function_value_pattern = re.compile('\{\{regexp\.replace\([\s]*(?P<type>internal|external)\.(?P<key>[\w]+)(?P<inner_key>\["[\w]+"\])?[\s]*,[\s]*"(?P<pattern>.*)"[\s]*,[\s]*"(?P<replace>.*)"[\s]*\)\}\}')
+regex_function_value_pattern = re.compile(r'\{\{regexp\.replace\([\s]*(?P<type>internal|external)\.(?P<key>[\w]+)(?P<inner_key>\["[\w]+"\])?[\s]*,[\s]*"(?P<pattern>.*)"[\s]*,[\s]*"(?P<replace>.*)"[\s]*\)\}\}')
 
 # Attempts to parse regexp replace function constraints of type {{regexp.replace(external.access, "foo", "bar")}}
 def try_parse_regexp_replace_function(value):
@@ -292,8 +302,7 @@ def matches_value(labels, key, value):
     logging.debug(f'User trait constraint of type {user_trait_type} on key {user_trait_key}')
     user_trait_type = template_types[user_trait_type]
     user_trait_key = StringVal(user_trait_key)
-    user_trait_values = user_trait_type(user_trait_key)
-    return IsMember(labels(key), user_trait_values)
+    return user_trait_type(user_trait_key, labels(key))
   # 'key' : 'prefix#{internal.trait_key}#suffix'
   elif ValueType.INTERPOLATION == constraint_type:
     prefix, user_trait_type, user_trait_key, suffix = parsed_value
@@ -302,9 +311,8 @@ def matches_value(labels, key, value):
     suffix = StringVal(suffix)
     user_trait_type = template_types[user_trait_type]
     user_trait_key = StringVal(user_trait_key)
-    user_trait_values = user_trait_type(user_trait_key)
     user_trait_value = String(f'{user_trait_type}_{user_trait_key}')
-    expr = IsMember(user_trait_value, user_trait_values)
+    expr = user_trait_type(user_trait_key, user_trait_value)
     expr = And(expr, labels(key) == Concat(prefix, user_trait_value, suffix))
     return Exists(user_trait_value, expr)
   # 'key' : '{{email.local(external.email)}}'

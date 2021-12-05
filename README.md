@@ -35,7 +35,7 @@ Two example roles are provided in this repo for ease of demonstration; compare t
 python role_equivalence_check.py data/role.yml data/role2.yml
 ```
 
-If the roles are not equivalent, the script will provide an example of a node, user, or user/node pair which is accepted by one role but blocked by the other.
+If the roles are not equivalent, the script will provide an example of a node, user, or user/node pair which is accepted by one role but blocked by the other; these examples can be somewhat difficult to decipher as they are produced by a SMT solver, but can be interpreted with some practice.
 
 ## Use: role querying
 
