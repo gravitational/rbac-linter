@@ -1,5 +1,5 @@
 import sre_parse
-from z3 import *
+from z3 import Distinct, Solver, sat, unsat # type: ignore
 from role_analyzer import regex_to_z3_expr
 
 def test_regex_equality():

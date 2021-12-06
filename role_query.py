@@ -2,7 +2,7 @@ import argparse
 import logging
 from role_analyzer import allows, is_role_template, labels_as_z3_map, traits_as_z3_map, ConstraintType, UserType
 import yaml
-from z3 import *
+from z3 import Solver # type: ignore
 
 def node_matches_role(nodes, roles):
   s = Solver()

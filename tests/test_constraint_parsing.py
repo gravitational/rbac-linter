@@ -8,7 +8,6 @@ from role_analyzer import \
   InterpolationConstraint, \
   EmailFunctionConstraint, \
   RegexFunctionConstraint
-import sre_parse
 
 def parse_match_any_constraint():
   unparsed = '*'

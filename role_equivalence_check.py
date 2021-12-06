@@ -2,9 +2,9 @@ import argparse
 import logging
 from role_analyzer import allows
 import yaml
-from z3 import *
+from z3 import Distinct, Solver, sat, unsat # type: ignore
 
-def roles_are_equivalent(r1, r2):
+def roles_are_equivalent(r1, r2) -> tuple[bool, str]:
   r1 = allows(r1)
   r2 = allows(r2)
   s = Solver()
