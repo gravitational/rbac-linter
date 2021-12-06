@@ -1,8 +1,10 @@
+from dataclasses import dataclass
 from enum import Enum, auto
 import logging
 import re
 import sre_parse
-from z3 import *
+import typing
+import z3 # type: ignore
 
 # Helpers
 def red(str):
@@ -11,14 +13,14 @@ def red(str):
   return red_text_start + str + red_text_end
 
 # Z3 Node Constants
-app_labels = Function('app_labels', StringSort(), StringSort())
-app_label_keys = Function('app_label_keys', StringSort(), BoolSort())
-node_labels = Function('node_labels', StringSort(), StringSort())
-node_label_keys = Function('node_label_keys', StringSort(), BoolSort())
-k8s_labels = Function('k8s_labels', StringSort(), StringSort())
-k8s_label_keys = Function('k8s_label_keys', StringSort(), BoolSort())
-db_labels = Function('db_labels', StringSort(), StringSort())
-db_label_keys = Function('db_label_keys', StringSort(), BoolSort())
+app_labels = z3.Function('app_labels', z3.StringSort(), z3.StringSort())
+app_label_keys = z3.Function('app_label_keys', z3.StringSort(), z3.BoolSort())
+node_labels = z3.Function('node_labels', z3.StringSort(), z3.StringSort())
+node_label_keys = z3.Function('node_label_keys', z3.StringSort(), z3.BoolSort())
+k8s_labels = z3.Function('k8s_labels', z3.StringSort(), z3.StringSort())
+k8s_label_keys = z3.Function('k8s_label_keys', z3.StringSort(), z3.BoolSort())
+db_labels = z3.Function('db_labels', z3.StringSort(), z3.StringSort())
+db_label_keys = z3.Function('db_label_keys', z3.StringSort(), z3.BoolSort())
 constraint_types = {
   'app_labels'        : (app_labels, app_label_keys),
   'node_labels'       : (node_labels, node_label_keys),
@@ -32,17 +34,17 @@ class ConstraintType(Enum):
   DATABASE = (db_labels, db_label_keys)
 
 # Z3 User Constants
-internal_traits = Function(
+internal_traits = z3.Function(
   'internal_traits',
-  StringSort(),
-  StringSort(),
-  BoolSort()
+  z3.StringSort(),
+  z3.StringSort(),
+  z3.BoolSort()
 )
-external_traits = Function(
+external_traits = z3.Function(
   'external_traits',
-  StringSort(),
-  StringSort(),
-  BoolSort()
+  z3.StringSort(),
+  z3.StringSort(),
+  z3.BoolSort()
 )
 template_types = {
   'internal'  : internal_traits,
@@ -52,162 +54,193 @@ class UserType(Enum):
   INTERNAL = internal_traits
   EXTERNAL = external_traits
 
+@dataclass
+class AnyValueConstraint:
+  value : str
+
+@dataclass
+class StringConstraint:
+  value : str
+
+@dataclass
+class RegexConstraint:
+  regex : sre_parse.SubPattern
+
+@dataclass
+class UserTraitConstraint:
+  trait_type      : str
+  trait_key       : str
+  inner_trait_key : str
+
+@dataclass
+class InterpolationConstraint:
+  prefix          : str
+  trait_type      : str
+  trait_key       : str
+  inner_trait_key : str
+  suffix          : str
+
+@dataclass
+class EmailFunctionConstraint:
+  trait_type      : str
+  trait_key       : str
+  inner_trait_key : str
+
+@dataclass
+class RegexFunctionConstraint:
+  trait_type      : str
+  trait_key       : str
+  inner_trait_key : str
+  pattern         : str
+  replace         : str
+
 # Attempts to parse the given value as a regex.
-# If the value is a valid regex, return (True, parsed_regex).
-# If the value can just be treated as a normal string (example 'ababab')
-# then return (False, None) so we can use regular string comparison.
-# If the value is not a valid regex return (False, None).
-def try_parse_regex(value):
+def try_parse_regex(value : str) -> typing.Optional[RegexConstraint]:
   try:
     parsed_regex = sre_parse.parse(value)
-    if not all([sre_parse.LITERAL == node_type for node_type, _ in parsed_regex]):
-      return (True, parsed_regex)
-    else:
-      return (False, None)
+    is_regex = not all([sre_parse.LITERAL == node_type for node_type, _ in parsed_regex])
+    return RegexConstraint(parsed_regex) if is_regex else None
   except Exception as e:
     logging.debug(f'Cannot parse regex {value} - {e}')
-    return (False, None)
+    return None
 
 # Regex pattern for {{internal.logins}} or {{external.email}} type template values.
 template_value_pattern = re.compile(r'\{\{(?P<type>internal|external)\.(?P<key>[\w]+)(\["(?P<inner_key>[\w]+)"\])?\}\}')
 
 # Attempts to parse template constraints of type {{internal.logins}}
-def try_parse_template(value):
+def try_parse_template(value : str) -> typing.Optional[UserTraitConstraint]:
   match = template_value_pattern.match(value)
-  if None == match:
-    return (False, None)
-  
-  user_type = match.group('type')
-  trait_key = match.group('key')
-  inner_trait_key = match.group('inner_key')
-
-  return (True, (user_type, trait_key, inner_trait_key))
+  if isinstance(match, re.Match):
+    user_type = match.group('type')
+    trait_key = match.group('key')
+    inner_trait_key = match.group('inner_key')
+    return UserTraitConstraint(user_type, trait_key, inner_trait_key)
+  else:
+    return None
 
 # Regex pattern for IAM#{{internal.logins}}#user type interpolation values.
 interpolation_value_pattern = re.compile(r'(?P<prefix>.*)\{\{(?P<type>internal|external)\.(?P<key>[\w]+)(\["(?P<inner_key>[\w]+)"\])?\}\}(?P<suffix>.*)')
 
 # Attempts to parse interpolation constraints of type IAM#{external.foo}
-def try_parse_interpolation(value):
+def try_parse_interpolation(value : str) -> typing.Optional[InterpolationConstraint]:
   match = interpolation_value_pattern.match(value)
-  if None == match:
-    return (False, None)
-  
-  prefix = match.group('prefix')
-  user_type = match.group('type')
-  trait_key = match.group('key')
-  suffix = match.group('suffix')
-  inner_trait_key = match.group('inner_key')
-
-  return (True, (prefix, user_type, trait_key, inner_trait_key, suffix))
+  if isinstance(match, re.Match):
+    prefix = match.group('prefix')
+    user_type = match.group('type')
+    trait_key = match.group('key')
+    inner_trait_key = match.group('inner_key')
+    suffix = match.group('suffix')
+    return InterpolationConstraint(prefix, user_type, trait_key, inner_trait_key, suffix)
+  else:
+    return None
 
 # Regex pattern for {{email.local(external.email)}}
 email_function_value_pattern = re.compile(r'\{\{email\.local\([\s]*(?P<type>internal|external)\.(?P<key>[\w]+)(\["(?P<inner_key>[\w]+)"\])?[\s]*\)\}\}')
 
 # Attempts to parse email function contraints of type {{email.local(external.email)}}
-def try_parse_email_function(value):
+def try_parse_email_function(value : str) -> typing.Optional[EmailFunctionConstraint]:
   match = email_function_value_pattern.match(value)
-  if None == match:
-    return (False, None)
-
-  user_type = match.group('type')
-  trait_key = match.group('key')
-  inner_trait_key = match.group('inner_key')
-
-  return (True, (user_type, trait_key, inner_trait_key))
+  if isinstance(match, re.Match):
+    user_type = match.group('type')
+    trait_key = match.group('key')
+    inner_trait_key = match.group('inner_key')
+    return EmailFunctionConstraint(user_type, trait_key, inner_trait_key)
+  else:
+    return None
 
 # Regex pattern for {{regexp.replace(external.access["env"], "^(staging)$", "$1")}}
 regex_function_value_pattern = re.compile(r'\{\{regexp\.replace\([\s]*(?P<type>internal|external)\.(?P<key>[\w]+)(\["(?P<inner_key>[\w]+)"\])?[\s]*,[\s]*"(?P<pattern>.*)"[\s]*,[\s]*"(?P<replace>.*)"[\s]*\)\}\}')
 
 # Attempts to parse regexp replace function constraints of type {{regexp.replace(external.access, "foo", "bar")}}
-def try_parse_regexp_replace_function(value):
+def try_parse_regexp_replace_function(value : str) -> typing.Optional[RegexFunctionConstraint]:
   match = regex_function_value_pattern.match(value)
-  if None == match:
-    return (False, None)
-
-  user_type = match.group('type')
-  trait_key = match.group('key')
-  pattern = match.group('pattern')
-  replace = match.group('replace')
-  inner_trait_key = match.group('inner_key')
-
-  return (True, (user_type, trait_key, inner_trait_key, pattern, replace))
+  if isinstance(match, re.Match):
+    user_type = match.group('type')
+    trait_key = match.group('key')
+    inner_trait_key = match.group('inner_key')
+    pattern = match.group('pattern')
+    replace = match.group('replace')
+    return RegexFunctionConstraint(user_type, trait_key, inner_trait_key, pattern, replace)
+  else:
+    return None
 
 # Determines whether the given constraint requires user traits to specify.
-def requires_user_traits(values):
+def requires_user_traits(values : typing.Union[str, list[str]]) -> bool:
   if not isinstance(values, list):
     values = [values]
   for value in values:
-    is_template, _ = try_parse_template(value)
-    is_interpolation, _ = try_parse_interpolation(value)
-    is_email_function, _ = try_parse_email_function(value)
-    is_regexp_replace_function, _ = try_parse_regexp_replace_function(value)
-    return is_template or is_interpolation or is_email_function or is_regexp_replace_function
-
-# Possible types of constraint values.
-class ValueType(Enum):
-  MATCH_ANY = auto()
-  STRING = auto()
-  REGEX = auto()
-  TEMPLATE = auto()
-  INTERPOLATION = auto()
-  EMAIL_FUNCTION = auto()
-  REGEXP_REPLACE_FUNCTION = auto()
+    is_template = try_parse_template(value) != None
+    is_interpolation = try_parse_interpolation(value) != None
+    is_email_function = try_parse_email_function(value) != None
+    is_regexp_replace_function = try_parse_regexp_replace_function(value) != None
+    if is_template or is_interpolation or is_email_function or is_regexp_replace_function:
+      return True
+  return False
 
 # Determines the category of the constraint value and parses it appropriately.
-def parse_constraint(value):
-  if '*' == value:
-    return (ValueType.MATCH_ANY, value)
-  
-  is_template, parsed_value = try_parse_template(value)
-  if is_template:
-    return (ValueType.TEMPLATE, parsed_value)
-  
-  is_interpolation, parsed_value = try_parse_interpolation(value)
-  if is_interpolation:
-    return (ValueType.INTERPOLATION, parsed_value)
-  
-  is_email_function, parsed_value = try_parse_email_function(value)
-  if is_email_function:
-    return (ValueType.EMAIL_FUNCTION, parsed_value)
+def parse_constraint(value : str) -> \
+  typing.Union[
+    AnyValueConstraint,
+    StringConstraint,
+    RegexConstraint,
+    UserTraitConstraint,
+    InterpolationConstraint,
+    EmailFunctionConstraint,
+    RegexFunctionConstraint]:
 
-  is_regexp_replace_function, parsed_value = try_parse_regexp_replace_function(value)
-  if is_regexp_replace_function:
-    return (ValueType.REGEXP_REPLACE_FUNCTION, parsed_value)
+  if '*' == value:
+    return AnyValueConstraint(value)
   
-  is_regex, parsed_regex = try_parse_regex(value)
-  if is_regex:
-    return (ValueType.REGEX, parsed_regex)
+  parsed_trait_constraint = try_parse_template(value)
+  if isinstance(parsed_trait_constraint, UserTraitConstraint):
+    return parsed_trait_constraint
   
-  return (ValueType.STRING, value)
+  parsed_interpolation_constraint = try_parse_interpolation(value)
+  if isinstance(parsed_interpolation_constraint, InterpolationConstraint):
+    return parsed_interpolation_constraint
+  
+  parsed_email_constraint = try_parse_email_function(value)
+  if isinstance(parsed_email_constraint, EmailFunctionConstraint):
+    return parsed_email_constraint
+
+  parsed_regex_function_constraint = try_parse_regexp_replace_function(value)
+  if isinstance(parsed_regex_function_constraint, RegexFunctionConstraint):
+    return parsed_regex_function_constraint
+  
+  parsed_regex_constraint = try_parse_regex(value)
+  if isinstance(parsed_regex_constraint, RegexConstraint):
+    return parsed_regex_constraint
+  
+  return StringConstraint(value)
 
 # The Z3 regex matching all strings accepted by re1 but not re2.
 # Formatted in camelcase to mimic Z3 regex API.
-def Minus(re1, re2):
-  return Intersect(re1, Complement(re2))
+def Minus(re1 : z3.ReRef, re2 : z3.ReRef) -> z3.ReRef:
+  return z3.Intersect(re1, z3.Complement(re2))
 
 # The Z3 regex matching any ASCII character.
 # Formatted in camelcase to mimic Z3 regex API.
-def AnyAsciiChar():
-  return Range(chr(0), chr(127))
+def AnyAsciiChar() -> z3.ReRef:
+  return z3.Range(chr(0), chr(127))
 
 # Defines regex categories in Z3.
-def category_regex(category):
+def category_regex(category : str) -> z3.ReRef:
   if sre_parse.CATEGORY_DIGIT == category:
-    return Range('0', '9')
+    return z3.Range('0', '9')
   elif sre_parse.CATEGORY_SPACE == category:
-    return Union(Re(' '), Re('\t'), Re('\n'), Re('\r'), Re('\f'), Re('\v'))
+    return z3.Union(z3.Re(' '), z3.Re('\t'), z3.Re('\n'), z3.Re('\r'), z3.Re('\f'), z3.Re('\v'))
   elif sre_parse.CATEGORY_WORD == category:
-    return Union(Range('a', 'z'), Range('A', 'Z'), Range('0', '9'), Re('_'))
+    return z3.Union(z3.Range('a', 'z'), z3.Range('A', 'Z'), z3.Range('0', '9'), z3.Re('_'))
   else:
     quit(red(f'ERROR: regex category {category} not yet implemented'))
     
 # Translates a specific regex construct into its Z3 equivalent.
-def regex_construct_to_z3_expr(regex_construct):
+def regex_construct_to_z3_expr(regex_construct) -> z3.ReRef:
   node_type, node_value = regex_construct
   if sre_parse.LITERAL == node_type: # a
-    return Re(chr(node_value))
+    return z3.Re(chr(node_value))
   if sre_parse.NOT_LITERAL == node_type: # [^a]
-    return Minus(AnyAsciiChar(), Re(chr(node_value)))
+    return Minus(AnyAsciiChar(), z3.Re(chr(node_value)))
   if sre_parse.SUBPATTERN == node_type:
     _, _, _, value = node_value
     return regex_to_z3_expr(value)
@@ -216,25 +249,25 @@ def regex_construct_to_z3_expr(regex_construct):
   elif sre_parse.MAX_REPEAT == node_type:
     low, high, value = node_value
     if (0, 1) == (low, high): # a?
-      return Option(regex_to_z3_expr(value))
+      return z3.Option(regex_to_z3_expr(value))
     elif (0, sre_parse.MAXREPEAT) == (low, high): # a*
-      return Star(regex_to_z3_expr(value))
+      return z3.Star(regex_to_z3_expr(value))
     elif (1, sre_parse.MAXREPEAT) == (low, high): # a+
-      return Plus(regex_to_z3_expr(value))
+      return z3.Plus(regex_to_z3_expr(value))
     else: # a{3,5}, a{3}
-      return Loop(regex_to_z3_expr(value), low, high)
+      return z3.Loop(regex_to_z3_expr(value), low, high)
   elif sre_parse.IN == node_type: # [abc]
     first_subnode_type, _ = node_value[0]
     if sre_parse.NEGATE == first_subnode_type: # [^abc]
-      return Minus(AnyAsciiChar(), Union([regex_construct_to_z3_expr(value) for value in node_value[1:]]))
+      return Minus(AnyAsciiChar(), z3.Union([regex_construct_to_z3_expr(value) for value in node_value[1:]]))
     else:
-      return Union([regex_construct_to_z3_expr(value) for value in node_value])
+      return z3.Union([regex_construct_to_z3_expr(value) for value in node_value])
   elif sre_parse.BRANCH == node_type: # ab|cd
     _, value = node_value
-    return Union([regex_to_z3_expr(v) for v in value])
+    return z3.Union([regex_to_z3_expr(v) for v in value])
   elif sre_parse.RANGE == node_type: # [a-z]
     low, high = node_value
-    return Range(chr(low), chr(high))
+    return z3.Range(chr(low), chr(high))
   elif sre_parse.CATEGORY == node_type: # \d, \s, \w
     if sre_parse.CATEGORY_DIGIT == node_value: # \d
       return category_regex(node_value)
@@ -266,13 +299,13 @@ def regex_construct_to_z3_expr(regex_construct):
 
 # Translates a parsed regex into its Z3 equivalent.
 # The parsed regex is a sequence of regex constructs (literals, *, +, etc.)
-def regex_to_z3_expr(regex):
+def regex_to_z3_expr(regex) -> z3.ReRef:
   if 0 == len(regex):
     quit(red('ERROR: regex is empty'))
   elif 1 == len(regex):
     return regex_construct_to_z3_expr(regex[0])
   else:
-    return Concat([regex_construct_to_z3_expr(construct) for construct in regex])
+    return z3.Concat([regex_construct_to_z3_expr(construct) for construct in regex])
 
 # Constructs an expression evaluating whether a specific label constraint
 # is satisfied by a given node, database, or k8s cluster.
@@ -281,58 +314,54 @@ def regex_to_z3_expr(regex):
 # 'location' : 'us-east-[\d]+'
 # 'owner' : {{external.email}}
 #
-def matches_value(labels, key, value):
-  constraint_type, parsed_value = parse_constraint(value)
+def matches_value(labels : z3.FuncDeclRef, key : str, value : str) -> z3.BoolRef:
+  constraint = parse_constraint(value)
   # 'key' : '*'
-  if ValueType.MATCH_ANY == constraint_type:
-    return BoolVal(True)
+  if isinstance(constraint, AnyValueConstraint):
+    return z3.BoolVal(True)
   # 'key' : 'value'
-  elif ValueType.STRING == constraint_type:
-    return labels(key) == StringVal(parsed_value)
+  elif isinstance(constraint, StringConstraint):
+    return labels(key) == z3.StringVal(constraint.value)
   # 'key' : '(ab)*a
-  elif ValueType.REGEX == constraint_type:
-    logging.debug(f'Uncompiled regex {parsed_value}')
-    regex = regex_to_z3_expr(parsed_value)
+  elif isinstance(constraint, RegexConstraint):
+    logging.debug(f'Uncompiled regex {constraint.regex}')
+    regex = regex_to_z3_expr(constraint.regex)
     logging.debug(f'Compiled regex {regex}')
-    return InRe(labels(key), regex)
+    return z3.InRe(labels(key), regex)
   # 'key' : '{internal.trait_key}'
-  elif ValueType.TEMPLATE == constraint_type:
-    user_trait_type, user_trait_key, inner_trait_key = parsed_value
-    logging.debug(f'User trait constraint of type {user_trait_type} on key {user_trait_key}[{inner_trait_key}]')
-    if None != inner_trait_key:
+  elif isinstance(constraint, UserTraitConstraint):
+    logging.debug(f'User trait constraint of type {constraint.trait_type} on key {constraint.trait_key}[{constraint.inner_trait_key}]')
+    if None != constraint.inner_trait_key:
       quit(red(f'Nested trait maps are not supported: {value}'))
-    user_trait_type = template_types[user_trait_type]
-    user_trait_key = StringVal(user_trait_key)
+    user_trait_type = template_types[constraint.trait_type]
+    user_trait_key = z3.StringVal(constraint.trait_key)
     return user_trait_type(user_trait_key, labels(key))
   # 'key' : 'prefix#{internal.trait_key}#suffix'
-  elif ValueType.INTERPOLATION == constraint_type:
-    prefix, user_trait_type, user_trait_key, inner_trait_key, suffix = parsed_value
-    logging.debug(f'User interpolation constraint of type {user_trait_type} on key {user_trait_key}[{inner_trait_key}] with prefix {prefix} and suffix {suffix}')
-    if None != inner_trait_key:
+  elif isinstance(constraint, InterpolationConstraint):
+    logging.debug(f'User interpolation constraint of type {constraint.trait_type} on key {constraint.trait_key}[{constraint.inner_trait_key}] with prefix {constraint.prefix} and suffix {constraint.suffix}')
+    if None != constraint.inner_trait_key:
       quit(red(f'Nested trait maps are not supported: {value}'))
-    prefix = StringVal(prefix)
-    suffix = StringVal(suffix)
-    user_trait_type = template_types[user_trait_type]
-    user_trait_key = StringVal(user_trait_key)
-    user_trait_value = String(f'{user_trait_type}_{user_trait_key}')
+    prefix = z3.StringVal(constraint.prefix)
+    suffix = z3.StringVal(constraint.suffix)
+    user_trait_type = template_types[constraint.trait_type]
+    user_trait_key = z3.StringVal(constraint.trait_key)
+    user_trait_value = z3.String(f'{user_trait_type}_{user_trait_key}')
     expr = user_trait_type(user_trait_key, user_trait_value)
-    expr = And(expr, labels(key) == Concat(prefix, user_trait_value, suffix))
-    return Exists(user_trait_value, expr)
+    expr = z3.And(expr, labels(key) == z3.Concat(prefix, user_trait_value, suffix))
+    return z3.Exists(user_trait_value, expr)
   # 'key' : '{{email.local(external.email)}}'
-  elif ValueType.EMAIL_FUNCTION == constraint_type:
-    user_trait_type, user_trait_key, inner_trait_key = parsed_value
-    logging.debug(f'Email function constraint of type {user_trait_type} on key {user_trait_key}[{inner_trait_key}]')
-    if None != inner_trait_key:
+  elif isinstance(constraint, EmailFunctionConstraint):
+    logging.debug(f'Email function constraint of type {constraint.trait_type} on key {constraint.trait_key}[{constraint.inner_trait_key}]')
+    if None != constraint.inner_trait_key:
       quit(red(f'Nested trait maps are not supported: {value}'))
-    user_trait_type = template_types[user_trait_type]
-    user_trait_key = StringVal(user_trait_key)
-    user_trait_value = String(f'{user_trait_type}_{user_trait_key}_email')
+    user_trait_type = template_types[constraint.trait_type]
+    user_trait_key = z3.StringVal(constraint.trait_key)
+    user_trait_value = z3.String(f'{user_trait_type}_{user_trait_key}_email')
     expr = user_trait_type(user_trait_key, user_trait_value)
-    expr = And(expr, labels(key) == SubString(user_trait_value, IntVal(0), IndexOf(user_trait_value, StringVal('@')) + IntVal(1)))
-    return Exists(user_trait_value, expr)
-  elif ValueType.REGEXP_REPLACE_FUNCTION == constraint_type:
-    user_trait_type, user_trait_key, inner_trait_key, pattern, replace = parsed_value
-    logging.debug(f'Regexp replace function constraint of type {user_trait_type} on key {user_trait_key}[{inner_trait_key}], replacing {pattern} with {replace}')
+    expr = z3.And(expr, labels(key) == z3.SubString(user_trait_value, z3.IntVal(0), z3.IndexOf(user_trait_value, z3.StringVal('@')) + z3.IntVal(1)))
+    return z3.Exists(user_trait_value, expr)
+  elif isinstance(constraint, RegexFunctionConstraint):
+    logging.debug(f'Regexp replace function constraint of type {constraint.trait_type} on key {constraint.trait_key}[{constraint.inner_trait_key}], replacing {constraint.pattern} with {constraint.replace}')
     quit(red(f'Regexp replace function constraint not yet supported given {key} : {value}'))
   else:
     quit(red(f'Unknown constraint value type {value}; not supported.'))
@@ -348,13 +377,13 @@ def matches_constraint(labels, key, value):
   logging.debug(f'Compiling {key} : {value} constraint')
   if '*' == key:
     if '*' == value:
-      return BoolVal(True)
+      return z3.BoolVal(True)
     else:
       quit(red(f'Constraint of type \'*\' : {value} not supported'))
 
-  key = StringVal(key)
+  key = z3.StringVal(key)
   if isinstance(value, list):
-    return Or([matches_value(labels, key, v) for v in value])
+    return z3.Or([matches_value(labels, key, v) for v in value])
   else:
     return matches_value(labels, key, value)
   
@@ -367,8 +396,8 @@ def matches_constraint(labels, key, value):
 #
 def matches_constraints(constraint_type, labels, label_keys, constraints):
   logging.debug(f'Compiling {constraint_type} constraints')
-  return And([
-    And(matches_constraint(labels, key, value), label_keys(StringVal(key)))
+  return z3.And([
+    z3.And(matches_constraint(labels, key, value), label_keys(z3.StringVal(key)))
     for key, value in constraints.items()
   ])
 
@@ -384,7 +413,7 @@ def matches_constraints(constraint_type, labels, label_keys, constraints):
 #   'contains_PII' : 'no'
 #
 def matches_constraint_group(group):
-  return Or([
+  return z3.Or([
     constraint_type in group
     and matches_constraints(constraint_type, labels, label_keys, group[constraint_type])
     for constraint_type, (labels, label_keys) in constraint_types.items()
@@ -412,7 +441,7 @@ def allows(role):
   allow_expr = 'allow' in spec and matches_constraint_group(spec['allow'])
   logging.debug('Compiling deny constraints')
   deny_expr = 'deny' in spec and matches_constraint_group(spec['deny'])
-  return And(allow_expr, Not(deny_expr))
+  return z3.And(allow_expr, z3.Not(deny_expr))
 
 # Determines whether the given role is a role template, filled in by user traits.
 def is_role_template(role):
@@ -437,12 +466,12 @@ def is_role_template(role):
 def labels_as_z3_map(labels, constraint_type):
   logging.debug(f'Compiling labels {labels} of type {constraint_type.name}')
   labels, label_keys = constraint_type.value
-  return And([And(labels(StringVal(key)) == StringVal(value), label_keys(StringVal(key))) for key, value in labels.items()])
+  return z3.And([z3.And(labels(z3.StringVal(key)) == z3.StringVal(value), label_keys(z3.StringVal(key))) for key, value in labels.items()])
 
 # Compiles the traits of a given internal or external user into a form
 # understood by Z3 that can be checked against a compiled set of role constraints.
 def traits_as_z3_map(traits, user_type):
   logging.debug(f'Compiling user traits {traits} of type {user_type.name}')
   if UserType.INTERNAL == user_type:
-    return And([user_type.value(StringVal(key), (StringVal(value))) for key, values in traits.items() for value in values])
+    return z3.And([user_type.value(z3.StringVal(key), (z3.StringVal(value))) for key, values in traits.items() for value in values])
   

@@ -245,3 +245,25 @@ second-role:
         'key' : '{{email.local(external.email)}}'
 are-equivalent: True
 is-template: True
+---
+test-name: Mixed templated & untemplated traits
+first-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role1
+  spec:
+    allow:
+      kubernetes_labels:
+        'key' : ['value1|value2', '{{external.key}}']
+second-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role2
+  spec:
+    allow:
+      kubernetes_labels:
+        'key' : ['value1', 'value2', '{{external.key}}']
+are-equivalent: True
+is-template: True

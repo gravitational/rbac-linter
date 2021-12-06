@@ -1,3 +1,4 @@
 pyyaml==6.0
 z3-solver==4.8.13.0
 pytest==6.2.5
+mypy==0.910
