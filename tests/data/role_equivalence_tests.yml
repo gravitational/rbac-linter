@@ -21,6 +21,7 @@ second-role:
       node_labels:
         'key' : 'value1'
 are-equivalent: True
+is-template: False
 ---
 test-name: Basic regular expressions
 first-role:
@@ -42,6 +43,7 @@ second-role:
       kubernetes_labels:
         'key' : 'a*a'
 are-equivalent: True
+is-template: False
 ---
 test-name: Unicode string constraints
 first-role:
@@ -66,3 +68,92 @@ second-role:
       app_labels:
         '鑰匙' : '∀'
 are-equivalent: True
+is-template: False
+---
+test-name: Regex vs. string list
+first-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role1
+  spec:
+    allow:
+      db_labels:
+        'key' : 'value1|value2'
+second-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role2
+  spec:
+    allow:
+      db_labels:
+        'key' : ['value1', 'value2']
+are-equivalent: True
+is-template: False
+---
+test-name: Regex vs. int list
+first-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role1
+  spec:
+    allow:
+      app_labels:
+        'key' : '[\d]'
+second-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role2
+  spec:
+    allow:
+      app_labels:
+        'key' : ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+are-equivalent: True
+is-template: False
+---
+test-name: Template values
+first-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role1
+  spec:
+    allow:
+      app_labels:
+        'key' : '{{internal.logins}}'
+second-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role2
+  spec:
+    allow:
+      app_labels:
+        'key' : '{{internal.logins}}'
+are-equivalent: True
+is-template: True
+---
+test-name: Match any key value more restrictive than match any
+first-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role1
+  spec:
+    allow:
+      app_labels:
+        'key' : '*'
+second-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role2
+  spec:
+    allow:
+      app_labels:
+        '*' : '*'
+are-equivalent: True
+is-template: False

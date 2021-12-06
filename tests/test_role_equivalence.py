@@ -1,6 +1,7 @@
 import os
 import pytest
 from role_equivalence_check import roles_are_equivalent
+from role_analyzer import is_role_template
 import yaml
 
 @pytest.fixture
@@ -17,4 +18,7 @@ def test_roles_are_equivalent(change_test_dir):
       r1 = test['first-role']
       r2 = test['second-role']
       are_equivalent = test['are-equivalent']
+      is_template = test['is-template']
+      assert is_template == is_role_template(r1)
+      assert is_template == is_role_template(r2)
       assert are_equivalent == roles_are_equivalent(r1, r2), test_name

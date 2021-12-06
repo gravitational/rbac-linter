@@ -12,20 +12,24 @@ def red(str):
 
 # Z3 Node Constants
 app_labels = Function('app_labels', StringSort(), StringSort())
+app_label_keys = Function('app_label_keys', StringSort(), BoolSort())
 node_labels = Function('node_labels', StringSort(), StringSort())
-kubernetes_labels = Function('kubernetes_labels', StringSort(), StringSort())
+node_label_keys = Function('node_label_keys', StringSort(), BoolSort())
+k8s_labels = Function('k8s_labels', StringSort(), StringSort())
+k8s_label_keys = Function('k8s_label_keys', StringSort(), BoolSort())
 db_labels = Function('db_labels', StringSort(), StringSort())
+db_label_keys = Function('db_label_keys', StringSort(), BoolSort())
 constraint_types = {
-  'app_labels'        : app_labels,
-  'node_labels'       : node_labels,
-  'kubernetes_labels' : kubernetes_labels,
-  'db_labels'         : db_labels
+  'app_labels'        : (app_labels, app_label_keys),
+  'node_labels'       : (node_labels, node_label_keys),
+  'kubernetes_labels' : (k8s_labels, k8s_label_keys),
+  'db_labels'         : (db_labels, db_label_keys)
 }
 class ConstraintType(Enum):
-  APP = app_labels
-  NODE = node_labels
-  KUBERNETES = kubernetes_labels
-  DATABASE = db_labels
+  APP = (app_labels, app_label_keys)
+  NODE = (node_labels, node_label_keys)
+  KUBERNETES = (k8s_labels, k8s_label_keys)
+  DATABASE = (db_labels, db_label_keys)
 
 # Z3 User Constants
 internal_traits = Function(
@@ -129,12 +133,15 @@ def try_parse_regexp_replace_function(value):
   return (True, (user_type, trait_key, inner_trait_key, pattern, replace))
 
 # Determines whether the given constraint requires user traits to specify.
-def requires_user_traits(value):
-  is_template, _ = try_parse_template(value)
-  is_interpolation, _ = try_parse_interpolation(value)
-  is_email_function, _ = try_parse_email_function(value)
-  is_regexp_replace_function, _ = try_parse_regexp_replace_function(value)
-  return is_template or is_interpolation or is_email_function or is_regexp_replace_function
+def requires_user_traits(values):
+  if not isinstance(values, list):
+    values = [values]
+  for value in values:
+    is_template, _ = try_parse_template(value)
+    is_interpolation, _ = try_parse_interpolation(value)
+    is_email_function, _ = try_parse_email_function(value)
+    is_regexp_replace_function, _ = try_parse_regexp_replace_function(value)
+    return is_template or is_interpolation or is_email_function or is_regexp_replace_function
 
 # Possible types of constraint values.
 class ValueType(Enum):
@@ -334,7 +341,7 @@ def matches_constraint(labels, key, value):
   logging.debug(f'Compiling {key} : {value} constraint')
   if '*' == key:
     if '*' == value:
-      return True
+      return BoolVal(True)
     else:
       quit(red(f'Constraint of type \'*\' : {value} not supported'))
 
@@ -351,10 +358,10 @@ def matches_constraint(labels, key, value):
 #
 # {'env' : ['test', 'prod'], 'location' : 'us-east-[\d]+' }
 #
-def matches_constraints(constraint_type, labels, constraints):
+def matches_constraints(constraint_type, labels, label_keys, constraints):
   logging.debug(f'Compiling {constraint_type} constraints')
   return And([
-    matches_constraint(labels, key, value)
+    And(matches_constraint(labels, key, value), label_keys(StringVal(key)))
     for key, value in constraints.items()
   ])
 
@@ -372,8 +379,8 @@ def matches_constraints(constraint_type, labels, constraints):
 def matches_constraint_group(group):
   return Or([
     constraint_type in group
-    and matches_constraints(constraint_type, labels, group[constraint_type])
-    for constraint_type, labels in constraint_types.items()
+    and matches_constraints(constraint_type, labels, label_keys, group[constraint_type])
+    for constraint_type, (labels, label_keys) in constraint_types.items()
   ])
 
 # Constructs an expression evaluating to whether a given role
@@ -403,20 +410,27 @@ def allows(role):
 # Determines whether the given role is a role template, filled in by user traits.
 def is_role_template(role):
   spec = role['spec']
-  allow = spec['allow']
-  groups = [allow[constraint_type].values() for constraint_type in constraint_types.keys() if constraint_type in allow]
-  any_template_values_in_allow = any([requires_user_traits(value) for values in groups for value in values])
-  deny = spec['deny']
-  groups = [deny[constraint_type] for constraint_type in constraint_types.keys() if constraint_type in deny]
-  any_template_values_in_deny = any([requires_user_traits(value) for values in groups for value in values])
-  return any_template_values_in_allow or any_template_values_in_deny
+  if 'allow' in spec:
+    allow = spec['allow']
+    groups = [allow[constraint_type].values() for constraint_type in constraint_types.keys() if constraint_type in allow]
+    if any([requires_user_traits(value) for values in groups for value in values]):
+      return True
+
+  if 'deny' in spec:
+    deny = spec['deny']
+    groups = [deny[constraint_type] for constraint_type in constraint_types.keys() if constraint_type in deny]
+    if any([requires_user_traits(value) for values in groups for value in values]):
+      return True
+
+  return False
 
 # Compiles the labels of a given node, k8s cluster, or database into a
 # form understood by Z3 that can be checked against a compiled set of role
 # constraints.
 def labels_as_z3_map(labels, constraint_type):
   logging.debug(f'Compiling labels {labels} of type {constraint_type.name}')
-  return And([constraint_type.value(StringVal(key)) == StringVal(value) for key, value in labels.items()])
+  labels, label_keys = constraint_type.value
+  return And([And(labels(StringVal(key)) == StringVal(value), label_keys(StringVal(key))) for key, value in labels.items()])
 
 # Compiles the traits of a given internal or external user into a form
 # understood by Z3 that can be checked against a compiled set of role constraints.
