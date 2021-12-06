@@ -68,6 +68,8 @@ The analysis engine supports the following types of constraints:
    * `'key' : '{{internal.trait}}'`
  * Strings interpolated from user traits (which themselves may be lists):
    * `'key' : 'foo#{{external.logins}}#bar'`
+ * The `email.local` function:
+   * `'key' : '{{email.local(external.email)}}'`
  * Mixed lists of all of the above:
    * `'key' : ['value', '(ab)*a', '{{internal.trait}}']`
 
@@ -78,13 +80,11 @@ The analysis engine does **not** currently support the following types of constr
    * `'key' : '^(ab)*a$'`
  * Nested maps in user traits:
    * `'key' : '{{external.trait["inner_key"]}}'`
- * The `email.local` function:
-   * `'key' : '{{email.local(external.email)}}'`
  * The `regexp.replace` function:
    * `'key' : '{{regexp.replace(external.env, "^(staging)$", "$1")}}'`
 
 It is possible that the first three could become supported by the analysis system with some work and trickery.
-The final two functions are much more complicated and seem likely to require work to extend the capabilities of Z3 itself.
+The `regexp.replace` is much more complicated and seem likely to require work to extend the capabilities of Z3 itself.
 
 ## Z3 issues impacting this project
 #### [Regex performance cliff when using InRe](https://github.com/Z3Prover/z3/issues/5648)

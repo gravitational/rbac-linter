@@ -11,15 +11,11 @@ def roles_are_equivalent(r1, r2):
   s.add(Distinct(r1, r2))
   result = s.check()
   if unsat == result:
-    print('Roles are equivalent.')
-    return True
+    return (True, 'Roles are equivalent')
   elif sat == result:
-    print('Roles are not equivalent; counterexample:')
-    print(s.model())
-    return False
+    return (False, f'Roles are not equivalent; counterexample: {s.model()}')
   else:
-    print(result)
-    return False
+    return (False, result)
 
 def main():
   parser = argparse.ArgumentParser(description='Check two roles for equivalence.')
@@ -37,8 +33,9 @@ def main():
     try:
       r1 = yaml.safe_load(r1)
       r2 = yaml.safe_load(r2)
-      #exit(0 if roles_are_equivalent(r1, r2) else 1)
-      roles_are_equivalent(r1, r2)
+      are_equivalent, msg = roles_are_equivalent(r1, r2)
+      print(msg)
+      #exit(0 if are_equivalent else 1)
     except yaml.YAMLError as e:
       print(e)
 

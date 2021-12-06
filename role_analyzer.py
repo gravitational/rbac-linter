@@ -322,7 +322,14 @@ def matches_value(labels, key, value):
   elif ValueType.EMAIL_FUNCTION == constraint_type:
     user_trait_type, user_trait_key, inner_trait_key = parsed_value
     logging.debug(f'Email function constraint of type {user_trait_type} on key {user_trait_key}[{inner_trait_key}]')
-    quit(red(f'Email function constraint not yet supported given {key} : {value}'))
+    if None != inner_trait_key:
+      quit(red(f'Nested trait maps are not supported: {value}'))
+    user_trait_type = template_types[user_trait_type]
+    user_trait_key = StringVal(user_trait_key)
+    user_trait_value = String(f'{user_trait_type}_{user_trait_key}_email')
+    expr = user_trait_type(user_trait_key, user_trait_value)
+    expr = And(expr, labels(key) == SubString(user_trait_value, IntVal(0), IndexOf(user_trait_value, StringVal('@')) + IntVal(1)))
+    return Exists(user_trait_value, expr)
   elif ValueType.REGEXP_REPLACE_FUNCTION == constraint_type:
     user_trait_type, user_trait_key, inner_trait_key, pattern, replace = parsed_value
     logging.debug(f'Regexp replace function constraint of type {user_trait_type} on key {user_trait_key}[{inner_trait_key}], replacing {pattern} with {replace}')

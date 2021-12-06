@@ -17,8 +17,9 @@ def test_roles_are_equivalent(change_test_dir):
       test_name = test['test-name']
       r1 = test['first-role']
       r2 = test['second-role']
-      are_equivalent = test['are-equivalent']
+      expected_are_equivalent = test['are-equivalent']
       is_template = test['is-template']
-      assert is_template == is_role_template(r1)
-      assert is_template == is_role_template(r2)
-      assert are_equivalent == roles_are_equivalent(r1, r2), test_name
+      assert is_template == is_role_template(r1), test_name
+      assert is_template == is_role_template(r2), test_name
+      actual_are_equivalent, msg = roles_are_equivalent(r1, r2)
+      assert expected_are_equivalent == actual_are_equivalent, (test_name, msg)

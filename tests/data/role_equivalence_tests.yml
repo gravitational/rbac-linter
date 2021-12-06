@@ -1,4 +1,26 @@
-test-name: List of string literals
+test-name: Match any key value more restrictive than match any
+first-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role1
+  spec:
+    allow:
+      app_labels:
+        'key' : '*'
+second-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role2
+  spec:
+    allow:
+      app_labels:
+        '*' : '*'
+are-equivalent: False
+is-template: False
+---
+test-name: Match any value equivalent
 first-role:
   kind: role
   version: v4
@@ -7,10 +29,7 @@ first-role:
   spec:
     allow:
       node_labels:
-        'key' : ['value1', 'value2']
-    deny:
-      node_labels:
-        'key' : 'value2'
+        '*' : '*'
 second-role:
   kind: role
   version: v4
@@ -19,6 +38,53 @@ second-role:
   spec:
     allow:
       node_labels:
+        '*' : '*'
+are-equivalent: True
+is-template: False
+---
+test-name: Match any key value equivalent
+first-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role1
+  spec:
+    allow:
+      kubernetes_labels:
+        'key' : '*'
+second-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role2
+  spec:
+    allow:
+      kubernetes_labels:
+        'key' : '*'
+are-equivalent: True
+is-template: False
+---
+test-name: List of string literals
+first-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role1
+  spec:
+    allow:
+      db_labels:
+        'key' : ['value1', 'value2']
+    deny:
+      db_labels:
+        'key' : 'value2'
+second-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role2
+  spec:
+    allow:
+      db_labels:
         'key' : 'value1'
 are-equivalent: True
 is-template: False
@@ -136,7 +202,7 @@ second-role:
 are-equivalent: True
 is-template: True
 ---
-test-name: Match any key value more restrictive than match any
+test-name: Interpolation values
 first-role:
   kind: role
   version: v4
@@ -144,8 +210,8 @@ first-role:
     name: role1
   spec:
     allow:
-      app_labels:
-        'key' : '*'
+      node_labels:
+        'key' : 'foo#{{external.logins}}#bar'
 second-role:
   kind: role
   version: v4
@@ -153,7 +219,29 @@ second-role:
     name: role2
   spec:
     allow:
-      app_labels:
-        '*' : '*'
+      node_labels:
+        'key' : 'foo#{{external.logins}}#bar'
 are-equivalent: True
-is-template: False
+is-template: True
+---
+test-name: Email function
+first-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role1
+  spec:
+    allow:
+      kubernetes_labels:
+        'key' : '{{email.local(external.email)}}'
+second-role:
+  kind: role
+  version: v4
+  metadata:
+    name: role2
+  spec:
+    allow:
+      kubernetes_labels:
+        'key' : '{{email.local(external.email)}}'
+are-equivalent: True
+is-template: True
