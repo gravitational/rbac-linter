@@ -7,7 +7,7 @@ from role_analyzer import \
   UserTraitConstraint, \
   InterpolationConstraint, \
   EmailFunctionConstraint, \
-  RegexFunctionConstraint
+  RegexReplaceFunctionConstraint
 
 def parse_match_any_constraint():
   unparsed = '*'
@@ -73,7 +73,7 @@ def test_parse_regexp_replace_function_constraint():
   ]
   
   for value in values:
-    expected = RegexFunctionConstraint(*value)
+    expected = RegexReplaceFunctionConstraint(*value)
     unparsed = f'{{{{regexp.replace({expected.trait_type}.{expected.trait_key}, "{expected.pattern}", "{expected.replace}")}}}}' if None == expected.inner_trait_key \
       else f'{{{{regexp.replace({expected.trait_type}.{expected.trait_key}["{expected.inner_trait_key}"], "{expected.pattern}", "{expected.replace}")}}}}'
     assert requires_user_traits(unparsed), unparsed

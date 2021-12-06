@@ -15,7 +15,7 @@ def roles_are_equivalent(r1, r2) -> tuple[bool, str]:
   elif sat == result:
     return (False, f'Roles are not equivalent; counterexample: {s.model()}')
   else:
-    return (False, result)
+    return (False, str(result))
 
 def main():
   parser = argparse.ArgumentParser(description='Check two roles for equivalence.')
