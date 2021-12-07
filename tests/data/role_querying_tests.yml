@@ -75,3 +75,89 @@ tests:
           db_labels:
             'key1' : 'value1'
     allows: True
+  - name: Role matches all entities
+    user:
+      type: INTERNAL
+      traits: {}
+    entity:
+      type: APP
+      labels:
+        'key1' : 'value1'
+        'key2' : 'value2'
+        'key3' : 'value3'
+    role:
+      kind: role
+      version: v4
+      metadata:
+        name: test
+      spec:
+        allow:
+          app_labels:
+            '*' : '*'
+    allows: True
+  - name: Role keys match any label values
+    user:
+      type: EXTERNAL
+      traits: {}
+    entity:
+      type: NODE
+      labels:
+        'key1' : 'value1'
+        'key2' : 'value2'
+        'key3' : 'value3'
+    role:
+      kind: role
+      version: v4
+      metadata:
+        name: test
+      spec:
+        allow:
+          node_labels:
+            'key1' : '*'
+            'key2' : '*'
+            'key3' : '*'
+    allows: True
+  - name: Role keys match any label values, with label key subset
+    user:
+      type: EXTERNAL
+      traits: {}
+    entity:
+      type: NODE
+      labels:
+        'key1' : 'value1'
+        'key2' : 'value2'
+    role:
+      kind: role
+      version: v4
+      metadata:
+        name: test
+      spec:
+        allow:
+          node_labels:
+            'key1' : '*'
+            'key2' : '*'
+            'key3' : '*'
+    allows: False
+  - name: Role keys match any label values, with label key superset
+    user:
+      type: INTERNAL
+      traits: {}
+    entity:
+      type: K8S
+      labels:
+        'key1' : 'value1'
+        'key2' : 'value2'
+        'key3' : 'value3'
+        'key4' : 'value4'
+    role:
+      kind: role
+      version: v4
+      metadata:
+        name: test
+      spec:
+        allow:
+          kubernetes_labels:
+            'key1' : '*'
+            'key2' : '*'
+            'key3' : '*'
+    allows: True

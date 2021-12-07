@@ -487,12 +487,15 @@ def labels_as_z3_map(
   logging.debug(f'Compiling labels {concrete_labels} of type {constraint_type.name}')
   labels, label_keys = constraint_type.value
   if concrete_labels is not None and any(concrete_labels):
-    return z3.And([
-      z3.And(
-        labels(z3.StringVal(key)) == z3.StringVal(value),
-        label_keys(z3.StringVal(key))
-      ) for key, value in concrete_labels.items()
-    ])
+    included = z3.And([label_keys(z3.StringVal(key)) for key in concrete_labels.keys()])
+    excluded_key = z3.String('excluded_key')
+    is_excluded_key = z3.And([excluded_key != z3.StringVal(key) for key in concrete_labels.keys()])
+    excluded = z3.Implies(is_excluded_key, z3.Not(label_keys(excluded_key)))
+    keys = z3.And(included, z3.ForAll(excluded_key, excluded))
+    return z3.And(keys, z3.And([
+      labels(z3.StringVal(key)) == z3.StringVal(value)
+      for key, value in concrete_labels.items()
+    ]))
   else:
     any_key = z3.String('any_key')
     return z3.ForAll(any_key, z3.Not(label_keys(any_key)))
@@ -527,6 +530,7 @@ def role_allows_user_access_to_entity(
   solver.add(traits_as_z3_map(user_traits, user_type))
   solver.add(labels_as_z3_map(entity_labels, entity_type))
   if z3.sat == solver.check():
+    print(solver.model())
     return solver.model().evaluate(allows(role), model_completion=True)
   else:
     raise ValueError(f'User traits {user_traits} of type {user_type.name} and entity labels {entity_labels} of type {entity_type.name} do not produce a valid model.')

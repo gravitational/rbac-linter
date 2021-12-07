@@ -17,6 +17,7 @@ def test_role_querying(change_test_dir):
     for test in tests['tests']:
       solver.push()
       test_name = test['name']
+      print(test_name)
       user_type = UserType[test['user']['type']]
       user_traits = test['user']['traits']
       entity_type = EntityType[test['entity']['type']]
