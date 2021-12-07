@@ -16,13 +16,13 @@ k8s_labels      = z3.Function('k8s_labels',       z3.StringSort(),  z3.StringSor
 k8s_label_keys  = z3.Function('k8s_label_keys',   z3.StringSort(),  z3.BoolSort())
 db_labels       = z3.Function('db_labels',        z3.StringSort(),  z3.StringSort())
 db_label_keys   = z3.Function('db_label_keys',    z3.StringSort(),  z3.BoolSort())
-constraint_types = {
+entity_types = {
   'app_labels'        : (app_labels,  app_label_keys),
   'node_labels'       : (node_labels, node_label_keys),
   'kubernetes_labels' : (k8s_labels,  k8s_label_keys),
   'db_labels'         : (db_labels,   db_label_keys)
 }
-class ConstraintType(Enum):
+class EntityType(Enum):
   APP   = (app_labels,  app_label_keys)
   NODE  = (node_labels, node_label_keys)
   K8S   = (k8s_labels,  k8s_label_keys)
@@ -93,7 +93,10 @@ class RegexReplaceFunctionConstraint:
 def try_parse_regex(value : str) -> typing.Optional[RegexConstraint]:
   try:
     parsed_regex = sre_parse.parse(value)
-    is_regex = not all([sre_constants.LITERAL == node_type for node_type, _ in parsed_regex.data])
+    is_regex = not all([
+      sre_constants.LITERAL == node_type
+      for node_type, _ in parsed_regex.data
+    ])
     return RegexConstraint(parsed_regex) if is_regex else None
   except Exception as e:
     logging.debug(f'Cannot parse regex {value} - {e}')
@@ -313,7 +316,7 @@ def regex_to_z3_expr(regex : sre_parse.SubPattern) -> z3.ReRef:
 #
 def matches_value(
     labels  : z3.FuncDeclRef,
-    key     : str,
+    key     : z3.SeqRef,
     value   : str
   ) -> z3.BoolRef:
   constraint = parse_constraint(value)
@@ -361,6 +364,7 @@ def matches_value(
     expr = user_trait_type(user_trait_key, user_trait_value)
     expr = z3.And(expr, labels(key) == z3.SubString(user_trait_value, z3.IntVal(0), z3.IndexOf(user_trait_value, z3.StringVal('@')) + z3.IntVal(1)))
     return z3.Exists(user_trait_value, expr)
+  # 'key' : '{{regexp.replace(external.access["env"], "^(staging)$", "$1")}}'
   elif isinstance(constraint, RegexReplaceFunctionConstraint):
     logging.debug(f'Regexp replace function constraint of type {constraint.trait_type} on key {constraint.trait_key}[{constraint.inner_trait_key}], replacing {constraint.pattern} with {constraint.replace}')
     raise NotImplementedError(f'Regexp replace function constraint not yet supported given {key} : {value}')
@@ -375,9 +379,10 @@ def matches_value(
 # 'env' : ['test', 'prod']
 #
 def matches_constraint(
-    labels  : z3.FuncDeclRef,
-    key     : str,
-    value   : typing.Union[str, list[str]]
+    labels      : z3.FuncDeclRef,
+    label_keys  : z3.FuncDeclRef,
+    key         : str,
+    value       : typing.Union[str, list[str]]
   ) -> z3.BoolRef:
   logging.debug(f'Compiling {key} : {value} constraint')
   if '*' == key:
@@ -388,9 +393,9 @@ def matches_constraint(
 
   key = z3.StringVal(key)
   if isinstance(value, list):
-    return z3.Or([matches_value(labels, key, v) for v in value])
+    return z3.And(label_keys(key), z3.Or([matches_value(labels, key, v) for v in value]))
   else:
-    return matches_value(labels, key, value)
+    return z3.And(label_keys(key), matches_value(labels, key, value))
   
 
 # Constructs an expression evaluating to whether a given set of label
@@ -407,7 +412,7 @@ def matches_constraints(
   ) -> z3.BoolRef:
   logging.debug(f'Compiling {constraint_type} constraints')
   return z3.And([
-    z3.And(matches_constraint(labels, key, value), label_keys(z3.StringVal(key)))
+    matches_constraint(labels, label_keys, key, value)
     for key, value in constraints.items()
   ])
 
@@ -428,7 +433,7 @@ def matches_constraint_group(
   return z3.Or([
     constraint_type in group
     and matches_constraints(constraint_type, labels, label_keys, group[constraint_type])
-    for constraint_type, (labels, label_keys) in constraint_types.items()
+    for constraint_type, (labels, label_keys) in entity_types.items()
   ])
 
 # Constructs an expression evaluating to whether a given role
@@ -445,7 +450,7 @@ def matches_constraint_group(
 #    node_labels:
 #      'env' : 'prod'
 #
-def allows(role) -> z3.BoolRef:
+def allows(role : typing.Any) -> z3.BoolRef:
   role_name = role['metadata']['name']
   logging.debug(f'Compiling role template {role_name}')
   spec = role['spec']
@@ -460,13 +465,13 @@ def is_role_template(role) -> bool:
   spec = role['spec']
   if 'allow' in spec:
     allow = spec['allow']
-    groups = [allow[constraint_type].values() for constraint_type in constraint_types.keys() if constraint_type in allow]
+    groups = [allow[constraint_type].values() for constraint_type in entity_types.keys() if constraint_type in allow]
     if any([requires_user_traits(value) for values in groups for value in values]):
       return True
 
   if 'deny' in spec:
     deny = spec['deny']
-    groups = [deny[constraint_type] for constraint_type in constraint_types.keys() if constraint_type in deny]
+    groups = [deny[constraint_type] for constraint_type in entity_types.keys() if constraint_type in deny]
     if any([requires_user_traits(value) for values in groups for value in values]):
       return True
 
@@ -476,20 +481,52 @@ def is_role_template(role) -> bool:
 # form understood by Z3 that can be checked against a compiled set of role
 # constraints.
 def labels_as_z3_map(
-    concrete_labels : dict[str, str],
-    constraint_type : ConstraintType
+    concrete_labels : typing.Optional[dict[str, str]],
+    constraint_type : EntityType
   ) -> z3.BoolRef:
   logging.debug(f'Compiling labels {concrete_labels} of type {constraint_type.name}')
   labels, label_keys = constraint_type.value
-  return z3.And([z3.And(labels(z3.StringVal(key)) == z3.StringVal(value), label_keys(z3.StringVal(key))) for key, value in concrete_labels.items()])
+  if concrete_labels is not None and any(concrete_labels):
+    return z3.And([
+      z3.And(
+        labels(z3.StringVal(key)) == z3.StringVal(value),
+        label_keys(z3.StringVal(key))
+      ) for key, value in concrete_labels.items()
+    ])
+  else:
+    any_key = z3.String('any_key')
+    return z3.ForAll(any_key, z3.Not(label_keys(any_key)))
 
 # Compiles the traits of a given internal or external user into a form
 # understood by Z3 that can be checked against a compiled set of role constraints.
 def traits_as_z3_map(
-    traits : dict[str, str],
+    traits : typing.Optional[dict[str, str]],
     user_type : UserType
-  ) -> z3.BoolRef:
+  ) -> typing.Optional[z3.BoolRef]:
   logging.debug(f'Compiling user traits {traits} of type {user_type.name}')
-  if UserType.INTERNAL == user_type:
-    return z3.And([user_type.value(z3.StringVal(key), (z3.StringVal(value))) for key, values in traits.items() for value in values])
-  
+  if traits is not None and any(traits):
+    return z3.And([
+      user_type.value(z3.StringVal(key), (z3.StringVal(value)))
+      for key, values in traits.items() for value in values
+    ])
+  else: # User does not have any traits.
+    any_key = z3.String('any_key')
+    any_value = z3.String('any_value')
+    return z3.ForAll([any_key, any_value], z3.Not(user_type.value(any_key, any_value)))
+
+# Determines whether the given role provides the user access to the entity.
+# Does not check whether the user actually possesses that role.
+def role_allows_user_access_to_entity(
+    role          : typing.Any,
+    user_traits   : typing.Optional[dict[str, str]],
+    user_type     : UserType,
+    entity_labels : dict[str, str],
+    entity_type   : EntityType,
+    solver        : z3.Solver = z3.Solver()
+  ) -> bool:
+  solver.add(traits_as_z3_map(user_traits, user_type))
+  solver.add(labels_as_z3_map(entity_labels, entity_type))
+  if z3.sat == solver.check():
+    return solver.model().evaluate(allows(role), model_completion=True)
+  else:
+    raise ValueError(f'User traits {user_traits} of type {user_type.name} and entity labels {entity_labels} of type {entity_type.name} do not produce a valid model.')

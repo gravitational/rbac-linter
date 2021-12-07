@@ -12,7 +12,7 @@ It also enables linting sets of roles to detect duplicates.
 2. Restore Python packages:
    * `pip install -r requirements.txt --user`
 3. Run unit tests:
-   * `python test.py`
+   * `pytest`
 
 ## Use: role equivalence checking
 

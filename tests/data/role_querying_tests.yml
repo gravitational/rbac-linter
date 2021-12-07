@@ -1,0 +1,77 @@
+tests:
+  - name: Basic string match on single label
+    user:
+      type: INTERNAL
+      traits: {}
+    entity:
+      type: APP
+      labels:
+        'key' : 'value'
+    role:
+      kind: role
+      version: v4
+      metadata:
+        name: test
+      spec:
+        allow:
+          app_labels:
+            'key' : 'value'
+    allows: True
+  - name: Basic string match on multiple labels
+    user:
+      type: EXTERNAL
+      traits: {}
+    entity:
+      type: NODE
+      labels:
+        'key1' : 'value1'
+        'key2' : 'value2'
+    role:
+      kind: role
+      version: v4
+      metadata:
+        name: test
+      spec:
+        allow:
+          node_labels:
+            'key1' : 'value1'
+            'key2' : 'value2'
+    allows: True
+  - name: Basic string matching with labels subset of role requirements
+    user:
+      type: INTERNAL
+      traits: {}
+    entity:
+      type: K8S
+      labels:
+        'key1' : 'value1'
+    role:
+      kind: role
+      version: v4
+      metadata:
+        name: test
+      spec:
+        allow:
+          kubernetes_labels:
+            'key1' : 'value1'
+            'key2' : 'value2'
+    allows: False
+  - name: Basic string matching with labels superset of role requirements
+    user:
+      type: EXTERNAL
+      traits: {}
+    entity:
+      type: DB
+      labels:
+        'key1' : 'value1'
+        'key2' : 'value2'
+    role:
+      kind: role
+      version: v4
+      metadata:
+        name: test
+      spec:
+        allow:
+          db_labels:
+            'key1' : 'value1'
+    allows: True

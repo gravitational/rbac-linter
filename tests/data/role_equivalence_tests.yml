@@ -1,269 +1,259 @@
-test-name: Match any key value more restrictive than match any
-first-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role1
-  spec:
-    allow:
-      app_labels:
-        'key' : '*'
-second-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role2
-  spec:
-    allow:
-      app_labels:
-        '*' : '*'
-are-equivalent: False
-is-template: False
----
-test-name: Match any value equivalent
-first-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role1
-  spec:
-    allow:
-      node_labels:
-        '*' : '*'
-second-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role2
-  spec:
-    allow:
-      node_labels:
-        '*' : '*'
-are-equivalent: True
-is-template: False
----
-test-name: Match any key value equivalent
-first-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role1
-  spec:
-    allow:
-      kubernetes_labels:
-        'key' : '*'
-second-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role2
-  spec:
-    allow:
-      kubernetes_labels:
-        'key' : '*'
-are-equivalent: True
-is-template: False
----
-test-name: List of string literals
-first-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role1
-  spec:
-    allow:
-      db_labels:
-        'key' : ['value1', 'value2']
-    deny:
-      db_labels:
-        'key' : 'value2'
-second-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role2
-  spec:
-    allow:
-      db_labels:
-        'key' : 'value1'
-are-equivalent: True
-is-template: False
----
-test-name: Basic regular expressions
-first-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role1
-  spec:
-    allow:
-      kubernetes_labels:
-        'key' : 'aa*'
-second-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role2
-  spec:
-    allow:
-      kubernetes_labels:
-        'key' : 'a*a'
-are-equivalent: True
-is-template: False
----
-test-name: Unicode string constraints
-first-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role1
-  spec:
-    allow:
-      app_labels:
-        '鑰匙' : ['∀', '∃']
-    deny:
-      app_labels:
-        '鑰匙' : '∃'
-second-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role2
-  spec:
-    allow:
-      app_labels:
-        '鑰匙' : '∀'
-are-equivalent: True
-is-template: False
----
-test-name: Regex vs. string list
-first-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role1
-  spec:
-    allow:
-      db_labels:
-        'key' : 'value1|value2'
-second-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role2
-  spec:
-    allow:
-      db_labels:
-        'key' : ['value1', 'value2']
-are-equivalent: True
-is-template: False
----
-test-name: Regex vs. int list
-first-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role1
-  spec:
-    allow:
-      app_labels:
-        'key' : '[\d]'
-second-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role2
-  spec:
-    allow:
-      app_labels:
-        'key' : ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
-are-equivalent: True
-is-template: False
----
-test-name: Template values
-first-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role1
-  spec:
-    allow:
-      app_labels:
-        'key' : '{{internal.logins}}'
-second-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role2
-  spec:
-    allow:
-      app_labels:
-        'key' : '{{internal.logins}}'
-are-equivalent: True
-is-template: True
----
-test-name: Interpolation values
-first-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role1
-  spec:
-    allow:
-      node_labels:
-        'key' : 'foo#{{external.logins}}#bar'
-second-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role2
-  spec:
-    allow:
-      node_labels:
-        'key' : 'foo#{{external.logins}}#bar'
-are-equivalent: True
-is-template: True
----
-test-name: Email function
-first-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role1
-  spec:
-    allow:
-      kubernetes_labels:
-        'key' : '{{email.local(external.email)}}'
-second-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role2
-  spec:
-    allow:
-      kubernetes_labels:
-        'key' : '{{email.local(external.email)}}'
-are-equivalent: True
-is-template: True
----
-test-name: Mixed templated & untemplated traits
-first-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role1
-  spec:
-    allow:
-      kubernetes_labels:
-        'key' : ['value1|value2', '{{external.key}}']
-second-role:
-  kind: role
-  version: v4
-  metadata:
-    name: role2
-  spec:
-    allow:
-      kubernetes_labels:
-        'key' : ['value1', 'value2', '{{external.key}}']
-are-equivalent: True
-is-template: True
+tests:
+  - name: Match any key value more restrictive than match any
+    first-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role1
+      spec:
+        allow:
+          app_labels:
+            'key' : '*'
+    second-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role2
+      spec:
+        allow:
+          app_labels:
+            '*' : '*'
+    are-equivalent: False
+    is-template: False
+  - name: Match any value equivalent
+    first-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role1
+      spec:
+        allow:
+          node_labels:
+            '*' : '*'
+    second-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role2
+      spec:
+        allow:
+          node_labels:
+            '*' : '*'
+    are-equivalent: True
+    is-template: False
+  - name: Match any key value equivalent
+    first-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role1
+      spec:
+        allow:
+          kubernetes_labels:
+            'key' : '*'
+    second-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role2
+      spec:
+        allow:
+          kubernetes_labels:
+            'key' : '*'
+    are-equivalent: True
+    is-template: False
+  - name: List of string literals
+    first-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role1
+      spec:
+        allow:
+          db_labels:
+            'key' : ['value1', 'value2']
+        deny:
+          db_labels:
+            'key' : 'value2'
+    second-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role2
+      spec:
+        allow:
+          db_labels:
+            'key' : 'value1'
+    are-equivalent: True
+    is-template: False
+  - name: Basic regular expressions
+    first-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role1
+      spec:
+        allow:
+          kubernetes_labels:
+            'key' : 'aa*'
+    second-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role2
+      spec:
+        allow:
+          kubernetes_labels:
+            'key' : 'a*a'
+    are-equivalent: True
+    is-template: False
+  - name: Unicode string constraints
+    first-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role1
+      spec:
+        allow:
+          app_labels:
+            '鑰匙' : ['∀', '∃']
+        deny:
+          app_labels:
+            '鑰匙' : '∃'
+    second-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role2
+      spec:
+        allow:
+          app_labels:
+            '鑰匙' : '∀'
+    are-equivalent: True
+    is-template: False
+  - name: Regex vs. string list
+    first-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role1
+      spec:
+        allow:
+          db_labels:
+            'key' : 'value1|value2'
+    second-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role2
+      spec:
+        allow:
+          db_labels:
+            'key' : ['value1', 'value2']
+    are-equivalent: True
+    is-template: False
+  - name: Regex vs. int list
+    first-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role1
+      spec:
+        allow:
+          app_labels:
+            'key' : '[\d]'
+    second-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role2
+      spec:
+        allow:
+          app_labels:
+            'key' : ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+    are-equivalent: True
+    is-template: False
+  - name: Template values
+    first-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role1
+      spec:
+        allow:
+          app_labels:
+            'key' : '{{internal.logins}}'
+    second-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role2
+      spec:
+        allow:
+          app_labels:
+            'key' : '{{internal.logins}}'
+    are-equivalent: True
+    is-template: True
+  - name: Interpolation values
+    first-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role1
+      spec:
+        allow:
+          node_labels:
+            'key' : 'foo#{{external.logins}}#bar'
+    second-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role2
+      spec:
+        allow:
+          node_labels:
+            'key' : 'foo#{{external.logins}}#bar'
+    are-equivalent: True
+    is-template: True
+  - name: Email function
+    first-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role1
+      spec:
+        allow:
+          kubernetes_labels:
+            'key' : '{{email.local(external.email)}}'
+    second-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role2
+      spec:
+        allow:
+          kubernetes_labels:
+            'key' : '{{email.local(external.email)}}'
+    are-equivalent: True
+    is-template: True
+  - name: Mixed templated & untemplated traits
+    first-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role1
+      spec:
+        allow:
+          kubernetes_labels:
+            'key' : ['value1|value2', '{{external.key}}']
+    second-role:
+      kind: role
+      version: v4
+      metadata:
+        name: role2
+      spec:
+        allow:
+          kubernetes_labels:
+            'key' : ['value1', 'value2', '{{external.key}}']
+    are-equivalent: True
+    is-template: True

@@ -1,6 +1,6 @@
 import argparse
 import logging
-from role_analyzer import allows, is_role_template, labels_as_z3_map, traits_as_z3_map, ConstraintType, UserType
+from role_analyzer import allows, is_role_template, labels_as_z3_map, traits_as_z3_map, EntityType, UserType
 import yaml
 from z3 import Solver # type: ignore
 
@@ -10,7 +10,7 @@ def node_matches_role(nodes, roles):
     s.push()
     node_name = node['spec']['hostname']
     node_labels = node['metadata']['labels']
-    s.add(labels_as_z3_map(node_labels, ConstraintType.NODE))
+    s.add(labels_as_z3_map(node_labels, EntityType.NODE))
     s.check()
     for role in roles:
       role_name = role['metadata']['name']
@@ -30,7 +30,7 @@ def node_matches_user(nodes, roles, users):
     s.push()
     node_name = node['spec']['hostname']
     node_labels = node['metadata']['labels']
-    s.add(labels_as_z3_map(node_labels, ConstraintType.NODE))
+    s.add(labels_as_z3_map(node_labels, EntityType.NODE))
     
     for user in users:
       s.push()

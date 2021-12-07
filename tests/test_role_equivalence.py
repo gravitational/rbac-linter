@@ -12,9 +12,9 @@ def change_test_dir(request):
 
 def test_roles_are_equivalent(change_test_dir):
   with open('data/role_equivalence_tests.yml', 'r') as tests:
-    tests = [yaml.safe_load(test) for test in tests.read().split('---')]
-    for test in tests:
-      test_name = test['test-name']
+    tests = yaml.safe_load(tests)
+    for test in tests['tests']:
+      test_name = test['name']
       r1 = test['first-role']
       r2 = test['second-role']
       expected_are_equivalent = test['are-equivalent']
