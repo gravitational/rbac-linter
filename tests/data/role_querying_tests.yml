@@ -161,3 +161,82 @@ tests:
             'key2' : '*'
             'key3' : '*'
     allows: True
+  - name: Regex constraint
+    user:
+      type: EXTERNAL
+      traits: {}
+    entity:
+      type: DB
+      labels:
+        'key' : 'abababababa'
+    role:
+      kind: role
+      version: v4
+      metadata:
+        name: test
+      spec:
+        allow:
+          db_labels:
+            'key' : '(ab)*a'
+    allows: True
+  - name: Mixed string and regex constraints
+    user:
+      type: INTERNAL
+      traits: {}
+    entity:
+      type: APP
+      labels:
+        'key1' : '12345789'
+        'key2' : 'value'
+    role:
+      kind: role
+      version: v4
+      metadata:
+        name: test
+      spec:
+        allow:
+          app_labels:
+            'key1' : '[\d]*'
+            'key2' : ['value', 'value2']
+    allows: True
+  - name: User trait constraint
+    user:
+      type: EXTERNAL
+      traits:
+        'trait_key1' : ['value1', 'someothervalue']
+        'trait_key2' : ['value2', 'yetanothervalue', 'andanother']
+    entity:
+      type: NODE
+      labels:
+        'label_key1' : 'value1'
+        'label_key2' : 'value2'
+    role:
+      kind: role
+      version: v4
+      metadata:
+        name: test
+      spec:
+        allow:
+          node_labels:
+            'label_key1' : '{{external.trait_key1}}'
+            'label_key2' : '{{external.trait_key2}}'
+    allows: True
+  - name: User trait interpolation constraint
+    user:
+      type: INTERNAL
+      traits:
+        'trait_key' : ['trait_value']
+    entity:
+      type: K8S
+      labels:
+        'label_key' : 'foo#trait_value#bar'
+    role:
+      kind: role
+      version: v4
+      metadata:
+        name: test
+      spec:
+        allow:
+          kubernetes_labels:
+            'label_key' : 'foo#{{internal.trait_key}}#bar'
+    allows: True

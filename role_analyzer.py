@@ -345,14 +345,15 @@ def matches_value(
     logging.debug(f'User interpolation constraint of type {constraint.trait_type} on key {constraint.trait_key}[{constraint.inner_trait_key}] with prefix {constraint.prefix} and suffix {constraint.suffix}')
     if None != constraint.inner_trait_key:
       raise NotImplementedError(f'Nested trait maps are not supported: {value}')
+    print(constraint)
     prefix = z3.StringVal(constraint.prefix)
     suffix = z3.StringVal(constraint.suffix)
     user_trait_type = template_types[constraint.trait_type]
     user_trait_key = z3.StringVal(constraint.trait_key)
-    user_trait_value = z3.String(f'{user_trait_type}_{user_trait_key}')
-    expr = user_trait_type(user_trait_key, user_trait_value)
-    expr = z3.And(expr, labels(key) == z3.Concat(prefix, user_trait_value, suffix))
-    return z3.Exists(user_trait_value, expr)
+    user_trait_value = z3.String(f'{constraint.trait_type}_{constraint.trait_key}')
+    is_user_trait_value = user_trait_type(user_trait_key, user_trait_value)
+    label_equals_interpolation = labels(key) == z3.Concat(prefix, user_trait_value, suffix)
+    return z3.Exists(user_trait_value, z3.And(is_user_trait_value, label_equals_interpolation))
   # 'key' : '{{email.local(external.email)}}'
   elif isinstance(constraint, EmailFunctionConstraint):
     logging.debug(f'Email function constraint of type {constraint.trait_type} on key {constraint.trait_key}[{constraint.inner_trait_key}]')
@@ -360,10 +361,10 @@ def matches_value(
       raise NotImplementedError(f'Nested trait maps are not supported: {value}')
     user_trait_type = template_types[constraint.trait_type]
     user_trait_key = z3.StringVal(constraint.trait_key)
-    user_trait_value = z3.String(f'{user_trait_type}_{user_trait_key}_email')
-    expr = user_trait_type(user_trait_key, user_trait_value)
-    expr = z3.And(expr, labels(key) == z3.SubString(user_trait_value, z3.IntVal(0), z3.IndexOf(user_trait_value, z3.StringVal('@')) + z3.IntVal(1)))
-    return z3.Exists(user_trait_value, expr)
+    user_trait_value = z3.String(f'{constraint.trait_type}_{constraint.trait_key}_email')
+    is_user_trait_value = user_trait_type(user_trait_key, user_trait_value)
+    label_equals_email_local = labels(key) == z3.SubString(user_trait_value, z3.IntVal(0), z3.IndexOf(user_trait_value, z3.StringVal('@')) + z3.IntVal(1))
+    return z3.Exists(user_trait_value, z3.And(is_user_trait_value, label_equals_email_local))
   # 'key' : '{{regexp.replace(external.access["env"], "^(staging)$", "$1")}}'
   elif isinstance(constraint, RegexReplaceFunctionConstraint):
     logging.debug(f'Regexp replace function constraint of type {constraint.trait_type} on key {constraint.trait_key}[{constraint.inner_trait_key}], replacing {constraint.pattern} with {constraint.replace}')
@@ -491,8 +492,8 @@ def labels_as_z3_map(
     excluded_key = z3.String('excluded_key')
     is_excluded_key = z3.And([excluded_key != z3.StringVal(key) for key in concrete_labels.keys()])
     excluded = z3.Implies(is_excluded_key, z3.Not(label_keys(excluded_key)))
-    keys = z3.And(included, z3.ForAll(excluded_key, excluded))
-    return z3.And(keys, z3.And([
+    restrictive_key_set = z3.And(included, z3.ForAll(excluded_key, excluded))
+    return z3.And(restrictive_key_set, z3.And([
       labels(z3.StringVal(key)) == z3.StringVal(value)
       for key, value in concrete_labels.items()
     ]))
@@ -503,15 +504,32 @@ def labels_as_z3_map(
 # Compiles the traits of a given internal or external user into a form
 # understood by Z3 that can be checked against a compiled set of role constraints.
 def traits_as_z3_map(
-    traits : typing.Optional[dict[str, str]],
+    concrete_traits : typing.Optional[dict[str, list[str]]],
     user_type : UserType
   ) -> typing.Optional[z3.BoolRef]:
-  logging.debug(f'Compiling user traits {traits} of type {user_type.name}')
-  if traits is not None and any(traits):
-    return z3.And([
-      user_type.value(z3.StringVal(key), (z3.StringVal(value)))
-      for key, values in traits.items() for value in values
+  logging.debug(f'Compiling user traits {concrete_traits} of type {user_type.name}')
+  traits = user_type.value
+  if concrete_traits is not None and any(concrete_traits):
+    included = z3.And([
+      traits(z3.StringVal(key), (z3.StringVal(value)))
+      for key, values in concrete_traits.items() for value in values
     ])
+    return included
+    #excluded_key = z3.String('excluded_key')
+    #any_value = z3.String('any_value')
+    #is_excluded_key = z3.And([excluded_key != z3.StringVal(key) for key in concrete_traits.keys()])
+    #excluded_keys_excluded = z3.Implies(is_excluded_key, z3.Not(traits(excluded_key, any_value)))
+    #exclude_excluded_keys = z3.ForAll([excluded_key, any_value], excluded_keys_excluded)
+    #included_key = z3.String('included_key')
+    #excluded_value = z3.String('excluded_value')
+    #is_included_key = z3.Or([included_key == z3.StringVal(key) for key in concrete_traits.keys()])
+    #is_excluded_value = z3.And([
+    #  z3.Implies(included_key == z3.StringVal(key), excluded_value != z3.StringVal(value))
+    #  for key, values in concrete_traits.items() for value in values
+    #])
+    #excluded_values_excluded = z3.Implies(z3.And(is_included_key, is_excluded_value), z3.Not(traits(included_key, excluded_value)) )
+    #exclude_excluded_values = z3.ForAll([included_key, excluded_value], excluded_values_excluded)
+    #return z3.And(included, exclude_excluded_keys, exclude_excluded_values)
   else: # User does not have any traits.
     any_key = z3.String('any_key')
     any_value = z3.String('any_value')
@@ -531,6 +549,14 @@ def role_allows_user_access_to_entity(
   solver.add(labels_as_z3_map(entity_labels, entity_type))
   if z3.sat == solver.check():
     print(solver.model())
-    return solver.model().evaluate(allows(role), model_completion=True)
+    result = solver.model().evaluate(allows(role), model_completion=True)
+    if isinstance(result, z3.QuantifierRef):
+      solver.push()
+      solver.add(result)
+      quantification_result = solver.check()
+      solver.pop()
+      return z3.sat == quantification_result
+    else:
+      return result
   else:
     raise ValueError(f'User traits {user_traits} of type {user_type.name} and entity labels {entity_labels} of type {entity_type.name} do not produce a valid model.')
