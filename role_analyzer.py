@@ -28,8 +28,8 @@ class EntityType(Enum):
   K8S   = (k8s_labels,  k8s_label_keys)
   DB    = (db_labels,   db_label_keys)
 
-def other_entity_types(entity_type : EntityType) -> filter[EntityType]:
-  return filter(lambda e : e != entity_type, EntityType)
+def other_entity_types(entity_type : EntityType) -> list[EntityType]:
+  return list(filter(lambda e : e != entity_type, EntityType))
 
 # Z3 User Constants
 internal_traits = z3.Function(

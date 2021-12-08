@@ -2,7 +2,7 @@ import argparse
 import logging
 from role_analyzer import allows, is_role_template, labels_as_z3_map, traits_as_z3_map, EntityType, UserType
 import yaml
-from z3 import Solver # type: ignore
+from z3 import Solver, sat # type: ignore
 
 def node_matches_role(nodes, roles):
   s = Solver()
@@ -11,17 +11,18 @@ def node_matches_role(nodes, roles):
     node_name = node['spec']['hostname']
     node_labels = node['metadata']['labels']
     s.add(labels_as_z3_map(node_labels, EntityType.NODE))
-    s.check()
     for role in roles:
       role_name = role['metadata']['name']
       if is_role_template(role):
         print(f'Role {role_name} is a role template; try specifying --users to check who has access')
       else:
-        result = s.model().evaluate(allows(role), model_completion=True)
-        if result:
+        s.push()
+        s.add(allows(role))
+        if sat == s.check():
           print(f'Node {node_name} matches role {role_name}')
         else:
           print(f'Node {node_name} does not match role {role_name}')
+        s.pop()
     s.pop()
 
 def node_matches_user(nodes, roles, users):
@@ -37,17 +38,18 @@ def node_matches_user(nodes, roles, users):
       user_name = user['metadata']['name']
       user_traits = user['spec']['traits']
       s.add(traits_as_z3_map(user_traits, UserType.INTERNAL))
-      s.check()
 
       user_role_names = user['spec']['roles']
       user_roles = filter(lambda role : role['metadata']['name'] in user_role_names, roles)
       for role in user_roles:
+        s.push()
         role_name = role['metadata']['name']
-        result = s.model().evaluate(allows(role), model_completion=True)
-        if result:
+        s.add(allows(role))
+        if sat == s.check():
           print(f'User {user_name} has access to {node_name} via role {role_name}')
         else:
           print(f'User {user_name} does NOT have access to {node_name} via role {role_name}')
+        s.pop()
       s.pop()
     s.pop()
 
