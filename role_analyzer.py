@@ -28,7 +28,7 @@ class EntityType(Enum):
   K8S   = (k8s_labels,  k8s_label_keys)
   DB    = (db_labels,   db_label_keys)
 
-def other_entity_types(entity_type : EntityType) -> list[EntityType]:
+def other_entity_types(entity_type : EntityType) -> filter[EntityType]:
   return filter(lambda e : e != entity_type, EntityType)
 
 # Z3 User Constants
@@ -373,7 +373,8 @@ def matches_value(
     user_trait_key = z3.StringVal(constraint.trait_key)
     user_trait_value = z3.String(f'{constraint.trait_type}_{constraint.trait_key}_email')
     is_user_trait_value = user_trait_type(user_trait_key, user_trait_value)
-    label_equals_email_local = labels(key) == z3.SubString(user_trait_value, z3.IntVal(0), z3.IndexOf(user_trait_value, z3.StringVal('@')) + z3.IntVal(1))
+    index_end_of_local = z3.IndexOf(user_trait_value, z3.StringVal('@'))
+    label_equals_email_local = labels(key) == z3.SubString(user_trait_value, z3.IntVal(0), index_end_of_local)
     return z3.Exists(user_trait_value, z3.And(is_user_trait_value, label_equals_email_local))
   # 'key' : '{{regexp.replace(external.access["env"], "^(staging)$", "$1")}}'
   elif isinstance(constraint, RegexReplaceFunctionConstraint):
@@ -569,12 +570,9 @@ def traits_as_z3_map(
 
 # Determines whether the given role provides the user access to the entity.
 # Does not check whether the user actually possesses that role.
-# Encodes the user traits and node labels as tight constraints on constants,
-# then asks Z3 to find model values matching those constraints; finally
-# the role expression is evaluated over those model values.
 def role_allows_user_access_to_entity(
     role          : typing.Any,
-    user_traits   : typing.Optional[dict[str, str]],
+    user_traits   : typing.Optional[dict[str, list[str]]],
     user_type     : UserType,
     entity_labels : dict[str, str],
     entity_type   : EntityType,

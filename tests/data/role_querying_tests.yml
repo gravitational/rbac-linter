@@ -323,3 +323,41 @@ tests:
           kubernetes_labels:
             'label_key' : 'foo#{{internal.trait_key}}#bar'
     allows: True
+  - name: User trait email constraint
+    user:
+      type: EXTERNAL
+      traits:
+        'email' : ['username@hostname.com', 'admin@hostname.com']
+    entity:
+      type: DB
+      labels:
+        'root_user' : 'admin'
+    role:
+      kind: role
+      version: v4
+      metadata:
+        name: test
+      spec:
+        allow:
+          db_labels:
+            'root_user' : ['root', '{{email.local(external.email)}}']
+    allows: True
+  - name: User trait unmet email constraint
+    user:
+      type: INTERNAL
+      traits:
+        'email' : ['username@hostname.com', 'root@hostname.com']
+    entity:
+      type: APP
+      labels:
+        'root_user' : 'admin'
+    role:
+      kind: role
+      version: v4
+      metadata:
+        name: test
+      spec:
+        allow:
+          app_labels:
+            'root_user' : ['root', '{{email.local(internal.email)}}']
+    allows: False
