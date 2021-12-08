@@ -74,17 +74,32 @@ The analysis engine supports the following types of constraints:
    * `'key' : ['value', '(ab)*a', '{{internal.trait}}']`
 
 The analysis engine does **not** currently support the following types of constraints:
- * Regular expressions over Unicode characters:
-   * `'key' : '(∀∃)*∀'`
- * `^` (start) and `$` (end) tokens in regexes:
-   * `'key' : '^(ab)*a$'`
- * Nested maps in user traits:
+ 1. Nested maps in user traits:
    * `'key' : '{{external.trait["inner_key"]}}'`
- * The `regexp.replace` function:
+ 2. Regular expressions over Unicode characters:
+   * `'key' : '(∀∃)*∀'`
+ 3. `^` (start) and `$` (end) tokens in regexes:
+   * `'key' : '^(ab)*a$'`
+ 4. Regexes that use min-matching semantics:
+   * `'key' : '(ab){3,5}?'`
+   * `'key' : 'x??'`
+ 5. The `regexp.replace` function:
    * `'key' : '{{regexp.replace(external.env, "^(staging)$", "$1")}}'`
 
 It is possible that the first three could become supported by the analysis system with some work and trickery.
-The `regexp.replace` is much more complicated and seem likely to require work to extend the capabilities of Z3 itself.
+Regex min-matching and `regexp.replace` are much more complicated and require work to extend the capabilities of Z3 itself.
+Beyond extending the [Z3 Replace](https://z3prover.github.io/api/html/namespacez3py.html#a667df8f95f4ad180a229c65f80c63f87) API to work with regexes instead of just strings, regex capturing groups would also have to be implemented.
+
+## Technical overview
+
+This project sets up a set of constraints over three sorts of constants: users, roles, and entities.
+Users possess certain roles, which grant or deny them access to particular entities.
+Users can be either external or internal, and possess a dictionary of traits where each string key maps to a set of string values.
+Entities can be apps, nodes, kubernetes clusters, or databases, and possess a dictionary of labels where each string key maps to a single string value.
+Roles function as a boolean expression over user traits and entity labels, determining whether a user is granted access to an entity.
+Teleport possesses a large variety of possible role constraints, documented [here](https://goteleport.com/docs/access-controls/reference/#roles).
+
+This work is conceptually similar to prior work [checking equivalence of firewalls](https://ahelwer.ca/post/2018-02-13-z3-firewall/), but here the constraints are over strings instead of IP addresses and ports.
 
 ## Z3 issues impacting this project
 #### [Regex performance cliff when using InRe](https://github.com/Z3Prover/z3/issues/5648)
