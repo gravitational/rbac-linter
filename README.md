@@ -56,34 +56,34 @@ You can omit the `--users` command line parameter and the program will simply sk
 ## Supported constraints and limitations
 
 The analysis engine supports the following types of constraints:
- * Matching any trait value:
+* Matching any trait value:
    * `'key' : '*'`
    * `'*' : '*'`
- * Simple literal string comparisons over Unicode characters:
+* Simple literal string comparisons over Unicode characters:
    * `'key' : 'value'`
    * `'鑰匙' : '∀∃'`
- * Regular expressions over ASCII characters:
+* Regular expressions over ASCII characters:
    * `'key' : '(ab)*a'`
- * Templated values from user traits (which may themselves be lists):
+* Templated values from user traits (which may themselves be lists):
    * `'key' : '{{internal.trait}}'`
- * Strings interpolated from user traits (which themselves may be lists):
+* Strings interpolated from user traits (which themselves may be lists):
    * `'key' : 'foo#{{external.logins}}#bar'`
- * The `email.local` function:
+* The `email.local` function:
    * `'key' : '{{email.local(external.email)}}'`
- * Mixed lists of all of the above:
+* Mixed lists of all of the above:
    * `'key' : ['value', '(ab)*a', '{{internal.trait}}']`
 
 The analysis engine does **not** currently support the following types of constraints:
- 1. Nested maps in user traits:
+1. Nested maps in user traits:
    * `'key' : '{{external.trait["inner_key"]}}'`
- 2. Regular expressions over Unicode characters:
+2. Regular expressions over Unicode characters:
    * `'key' : '(∀∃)*∀'`
- 3. `^` (start) and `$` (end) tokens in regexes:
+3. `^` (start) and `$` (end) tokens in regexes:
    * `'key' : '^(ab)*a$'`
- 4. Regexes that use min-matching semantics:
+4. Regexes that use min-matching semantics:
    * `'key' : '(ab){3,5}?'`
    * `'key' : 'x??'`
- 5. The `regexp.replace` function:
+5. The `regexp.replace` function:
    * `'key' : '{{regexp.replace(external.env, "^(staging)$", "$1")}}'`
 
 It is possible that the first three could become supported by the analysis system with some work and trickery.
