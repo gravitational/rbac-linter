@@ -28,6 +28,9 @@ class EntityType(Enum):
   K8S   = (k8s_labels,  k8s_label_keys)
   DB    = (db_labels,   db_label_keys)
 
+def other_entity_types(entity_type : EntityType) -> list[EntityType]:
+  return filter(lambda e : e != entity_type, EntityType)
+
 # Z3 User Constants
 internal_traits = z3.Function(
   'internal_traits',
@@ -48,6 +51,14 @@ template_types = {
 class UserType(Enum):
   INTERNAL = internal_traits
   EXTERNAL = external_traits
+
+def other_user_type(user_type : UserType) -> UserType:
+  if UserType.INTERNAL == user_type:
+    return UserType.EXTERNAL
+  elif UserType.EXTERNAL == user_type:
+    return UserType.INTERNAL
+  else:
+    raise ValueError(f'Invalid user type {user_type}')
 
 @dataclass
 class AnyValueConstraint:
@@ -345,7 +356,6 @@ def matches_value(
     logging.debug(f'User interpolation constraint of type {constraint.trait_type} on key {constraint.trait_key}[{constraint.inner_trait_key}] with prefix {constraint.prefix} and suffix {constraint.suffix}')
     if None != constraint.inner_trait_key:
       raise NotImplementedError(f'Nested trait maps are not supported: {value}')
-    print(constraint)
     prefix = z3.StringVal(constraint.prefix)
     suffix = z3.StringVal(constraint.suffix)
     user_trait_type = template_types[constraint.trait_type]
@@ -478,28 +488,40 @@ def is_role_template(role) -> bool:
 
   return False
 
-# Compiles the labels of a given node, k8s cluster, or database into a
+# Compiles the labels of a given app, node, k8s cluster, or database into a
 # form understood by Z3 that can be checked against a compiled set of role
 # constraints.
 def labels_as_z3_map(
     concrete_labels : typing.Optional[dict[str, str]],
-    constraint_type : EntityType
+    entity_type : EntityType
   ) -> z3.BoolRef:
-  logging.debug(f'Compiling labels {concrete_labels} of type {constraint_type.name}')
-  labels, label_keys = constraint_type.value
+  logging.debug(f'Compiling labels {concrete_labels} of type {entity_type.name}')
+  # Specify unused entity types have no label values
+  others_unused = z3.BoolVal(True)
+  for other_entity_type in other_entity_types(entity_type):
+    _, other_label_keys = other_entity_type.value
+    any_key = z3.String(f'{other_entity_type.name}_any_key')
+    other_unused = z3.ForAll(any_key, z3.Not(other_label_keys(any_key)))
+    others_unused = z3.And(others_unused, other_unused)
+    
+  labels, label_keys = entity_type.value
+  # It isn't enough to specify which values are in the set, we must also
+  # specify which values are *not* in the set. Otherwise Z3 finds the
+  # trivial set model [else -> True] which contains all string values.
   if concrete_labels is not None and any(concrete_labels):
     included = z3.And([label_keys(z3.StringVal(key)) for key in concrete_labels.keys()])
     excluded_key = z3.String('excluded_key')
     is_excluded_key = z3.And([excluded_key != z3.StringVal(key) for key in concrete_labels.keys()])
     excluded = z3.Implies(is_excluded_key, z3.Not(label_keys(excluded_key)))
     restrictive_key_set = z3.And(included, z3.ForAll(excluded_key, excluded))
-    return z3.And(restrictive_key_set, z3.And([
+    return z3.And(others_unused, restrictive_key_set, z3.And([
       labels(z3.StringVal(key)) == z3.StringVal(value)
       for key, value in concrete_labels.items()
     ]))
   else:
-    any_key = z3.String('any_key')
-    return z3.ForAll(any_key, z3.Not(label_keys(any_key)))
+    any_key = z3.String(f'{entity_type.name}_any_key')
+    this_unused = z3.ForAll(any_key, z3.Not(label_keys(any_key)))
+    return z3.And(others_unused, this_unused)
 
 # Compiles the traits of a given internal or external user into a form
 # understood by Z3 that can be checked against a compiled set of role constraints.
@@ -508,35 +530,48 @@ def traits_as_z3_map(
     user_type : UserType
   ) -> typing.Optional[z3.BoolRef]:
   logging.debug(f'Compiling user traits {concrete_traits} of type {user_type.name}')
+
+  # Specify unused user type has no trait values
+  other_traits = other_user_type(user_type)
+  any_key = z3.String(f'{other_traits.name}_any_key')
+  any_value = z3.String(f'{other_traits.name}_any_value')
+  other_is_unused = z3.ForAll([any_key, any_value], z3.Not(other_traits.value(any_key, any_value)))
+
   traits = user_type.value
+  # It isn't enough to specify which values are in the set, we must also
+  # specify which values are *not* in the set. Otherwise Z3 finds the
+  # trivial set model [else -> True] which contains all string values.
   if concrete_traits is not None and any(concrete_traits):
     included = z3.And([
       traits(z3.StringVal(key), (z3.StringVal(value)))
       for key, values in concrete_traits.items() for value in values
     ])
-    return included
-    #excluded_key = z3.String('excluded_key')
-    #any_value = z3.String('any_value')
-    #is_excluded_key = z3.And([excluded_key != z3.StringVal(key) for key in concrete_traits.keys()])
-    #excluded_keys_excluded = z3.Implies(is_excluded_key, z3.Not(traits(excluded_key, any_value)))
-    #exclude_excluded_keys = z3.ForAll([excluded_key, any_value], excluded_keys_excluded)
-    #included_key = z3.String('included_key')
-    #excluded_value = z3.String('excluded_value')
-    #is_included_key = z3.Or([included_key == z3.StringVal(key) for key in concrete_traits.keys()])
-    #is_excluded_value = z3.And([
-    #  z3.Implies(included_key == z3.StringVal(key), excluded_value != z3.StringVal(value))
-    #  for key, values in concrete_traits.items() for value in values
-    #])
-    #excluded_values_excluded = z3.Implies(z3.And(is_included_key, is_excluded_value), z3.Not(traits(included_key, excluded_value)) )
-    #exclude_excluded_values = z3.ForAll([included_key, excluded_value], excluded_values_excluded)
-    #return z3.And(included, exclude_excluded_keys, exclude_excluded_values)
-  else: # User does not have any traits.
-    any_key = z3.String('any_key')
+    excluded_key = z3.String('excluded_key')
     any_value = z3.String('any_value')
-    return z3.ForAll([any_key, any_value], z3.Not(user_type.value(any_key, any_value)))
+    is_excluded_key = z3.And([excluded_key != z3.StringVal(key) for key in concrete_traits.keys()])
+    excluded_keys_excluded = z3.Implies(is_excluded_key, z3.Not(traits(excluded_key, any_value)))
+    exclude_excluded_keys = z3.ForAll([excluded_key, any_value], excluded_keys_excluded)
+    included_key = z3.String('included_key')
+    excluded_value = z3.String('excluded_value')
+    is_included_key = z3.Or([included_key == z3.StringVal(key) for key in concrete_traits.keys()])
+    is_excluded_value = z3.And([
+      z3.Implies(included_key == z3.StringVal(key), excluded_value != z3.StringVal(value))
+      for key, values in concrete_traits.items() for value in values
+    ])
+    excluded_values_excluded = z3.Implies(z3.And(is_included_key, is_excluded_value), z3.Not(traits(included_key, excluded_value)) )
+    exclude_excluded_values = z3.ForAll([included_key, excluded_value], excluded_values_excluded)
+    return z3.And(other_is_unused, included, exclude_excluded_keys, exclude_excluded_values)
+  else: # User does not have any traits.
+    any_key = z3.String(f'{user_type.name}_any_key')
+    any_value = z3.String(f'{user_type.name}_any_value')
+    this_is_unused = z3.ForAll([any_key, any_value], z3.Not(traits(any_key, any_value)))
+    return z3.And(other_is_unused, this_is_unused)
 
 # Determines whether the given role provides the user access to the entity.
 # Does not check whether the user actually possesses that role.
+# Encodes the user traits and node labels as tight constraints on constants,
+# then asks Z3 to find model values matching those constraints; finally
+# the role expression is evaluated over those model values.
 def role_allows_user_access_to_entity(
     role          : typing.Any,
     user_traits   : typing.Optional[dict[str, str]],
@@ -547,16 +582,5 @@ def role_allows_user_access_to_entity(
   ) -> bool:
   solver.add(traits_as_z3_map(user_traits, user_type))
   solver.add(labels_as_z3_map(entity_labels, entity_type))
-  if z3.sat == solver.check():
-    print(solver.model())
-    result = solver.model().evaluate(allows(role), model_completion=True)
-    if isinstance(result, z3.QuantifierRef):
-      solver.push()
-      solver.add(result)
-      quantification_result = solver.check()
-      solver.pop()
-      return z3.sat == quantification_result
-    else:
-      return result
-  else:
-    raise ValueError(f'User traits {user_traits} of type {user_type.name} and entity labels {entity_labels} of type {entity_type.name} do not produce a valid model.')
+  solver.add(allows(role))
+  return z3.sat == solver.check()

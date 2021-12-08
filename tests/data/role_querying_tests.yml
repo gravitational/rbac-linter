@@ -17,6 +17,24 @@ tests:
           app_labels:
             'key' : 'value'
     allows: True
+  - name: Mismatched entity type
+    user:
+      type: INTERNAL
+      traits: {}
+    entity:
+      type: NODE
+      labels:
+        'key' : 'value'
+    role:
+      kind: role
+      version: v4
+      metadata:
+        name: test
+      spec:
+        allow:
+          app_labels:
+            'key' : 'value'
+    allows: False
   - name: Basic string match on multiple labels
     user:
       type: EXTERNAL
@@ -221,6 +239,71 @@ tests:
             'label_key1' : '{{external.trait_key1}}'
             'label_key2' : '{{external.trait_key2}}'
     allows: True
+  - name: Missing user trait key required by constraint
+    user:
+      type: INTERNAL
+      traits:
+        'trait_key1' : ['value1', 'someothervalue']
+    entity:
+      type: DB
+      labels:
+        'label_key1' : 'value1'
+        'label_key2' : 'value2'
+    role:
+      kind: role
+      version: v4
+      metadata:
+        name: test
+      spec:
+        allow:
+          db_labels:
+            'label_key1' : '{{internal.trait_key1}}'
+            'label_key2' : '{{internal.trait_key2}}'
+    allows: False
+  - name: Missing user trait value required by constraint
+    user:
+      type: EXTERNAL
+      traits:
+        'trait_key1' : ['value1', 'someothervalue']
+        'trait_key2' : ['yetanothervalue', 'andanother']
+    entity:
+      type: K8S
+      labels:
+        'label_key1' : 'value1'
+        'label_key2' : 'value2'
+    role:
+      kind: role
+      version: v4
+      metadata:
+        name: test
+      spec:
+        allow:
+          kubernetes_labels:
+            'label_key1' : '{{external.trait_key1}}'
+            'label_key2' : '{{external.trait_key2}}'
+    allows: False
+  - name: Wrong type of user traits
+    user:
+      type: INTERNAL
+      traits:
+        'trait_key1' : ['value1', 'someothervalue']
+        'trait_key2' : ['value2', 'yetanothervalue', 'andanother']
+    entity:
+      type: K8S
+      labels:
+        'label_key1' : 'value1'
+        'label_key2' : 'value2'
+    role:
+      kind: role
+      version: v4
+      metadata:
+        name: test
+      spec:
+        allow:
+          kubernetes_labels:
+            'label_key1' : '{{external.trait_key1}}'
+            'label_key2' : '{{external.trait_key2}}'
+    allows: False
   - name: User trait interpolation constraint
     user:
       type: INTERNAL

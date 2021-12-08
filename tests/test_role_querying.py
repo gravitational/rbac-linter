@@ -17,7 +17,6 @@ def test_role_querying(change_test_dir):
     for test in tests['tests']:
       solver.push()
       test_name = test['name']
-      print(test_name)
       user_type = UserType[test['user']['type']]
       user_traits = test['user']['traits']
       entity_type = EntityType[test['entity']['type']]
@@ -25,5 +24,11 @@ def test_role_querying(change_test_dir):
       role = test['role']
       expected = test['allows']
       actual = role_allows_user_access_to_entity(role, user_traits, user_type, entity_labels, entity_type, solver)
+      success = expected == actual
+      if not success:
+        print(user_traits)
+        print(entity_labels)
+        if actual:
+          print(solver.model())
       assert expected == actual, test_name
       solver.pop()

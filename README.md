@@ -91,7 +91,7 @@ The `regexp.replace` is much more complicated and seem likely to require work to
 This means overly-complicated regular expressions are likely to cause the analysis engine to run forever; however, the fix is not complicated and will hopefully be included in a near-future release; direct comparison of the same regular expressions is usually quite fast.
 #### [Possible regression in model output for functions from strings to strings in python](https://github.com/Z3Prover/z3/issues/5674)
 This impacts how the counterexample models are displayed in the role equivalence check program, if the roles are not equivalent.
-This has been fixed but the fix is not present in the latest Z3 4.8.13 release; as a workaround you can download the `.whl` file from the [Z3 nightly build](https://github.com/Z3Prover/z3/releases/tag/Nightly) and install it with the command `python -m pip install z3_solver-*.whl --user`
+This has been fixed but the fix is not present in the latest Z3 4.8.13 release; as a workaround you can download the `.whl` file from the [Z3 nightly build](https://github.com/Z3Prover/z3/releases/tag/Nightly) and install it with the command `pip install z3_solver-*.whl --user`
 #### [Regex performance regression from 4.8.12 to 4.8.13](https://github.com/Z3Prover/z3/issues/5693)
 This makes previously-solvable regexes take forever.
 However, the regexes involved are quite complicated so would likely be unsolvable due to the above issue anyway.
