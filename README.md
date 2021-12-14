@@ -8,11 +8,14 @@ It also enables linting sets of roles to detect duplicates.
 ## Build & Test
 
 1. Install dependencies:
-   * [Python 3.x](https://www.python.org/downloads/)
+   * [Python 3.9](https://www.python.org/downloads/)
 2. Restore Python packages:
    * `pip install -r requirements.txt --user`
 3. Run unit tests:
-   * `pytest`
+   * `python3.9 -m pytest`
+
+*Note* On ubuntu, follow these steps to install pip for python 3.9: https://stackoverflow.com/questions/65644782/how-to-install-pip-for-python-3-9-on-ubuntu-20-04
+Then install pytest: `python3.9 -m pip install pytest`
 
 ## Use: role equivalence checking
 
