@@ -104,8 +104,8 @@ class RegexReplaceFunctionConstraint:
 def try_parse_regex(value : str) -> typing.Optional[RegexConstraint]:
   try:
     parsed_regex = sre_parse.parse(value)
-    is_regex = not all([
-      sre_constants.LITERAL == node_type
+    is_regex = any([
+      sre_constants.LITERAL != node_type
       for node_type, _ in parsed_regex.data
     ])
     return RegexConstraint(parsed_regex) if is_regex else None
@@ -146,7 +146,7 @@ def try_parse_interpolation(value : str) -> typing.Optional[InterpolationConstra
 # Regex pattern for {{email.local(external.email)}}
 email_function_value_pattern = re.compile(r'\{\{email\.local\([\s]*(?P<type>internal|external)\.(?P<key>[\w]+)(\["(?P<inner_key>[\w]+)"\])?[\s]*\)\}\}')
 
-# Attempts to parse email function contraints of type {{email.local(external.email)}}
+# Attempts to parse email function constraints of type {{email.local(external.email)}}
 def try_parse_email_function(value : str) -> typing.Optional[EmailFunctionConstraint]:
   match = email_function_value_pattern.match(value)
   if isinstance(match, re.Match):
@@ -314,7 +314,7 @@ def regex_to_z3_expr(regex : sre_parse.SubPattern) -> z3.ReRef:
   if 0 == len(regex.data):
     raise ValueError('ERROR: regex is empty')
   elif 1 == len(regex.data):
-    return regex_construct_to_z3_expr(regex[0])
+    return regex_construct_to_z3_expr(regex.data[0])
   else:
     return z3.Concat([regex_construct_to_z3_expr(construct) for construct in regex.data])
 
