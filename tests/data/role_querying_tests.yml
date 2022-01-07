@@ -361,3 +361,27 @@ tests:
           app_labels:
             'root_user' : ['root', '{{email.local(internal.email)}}']
     allows: False
+  - name: Deny if single deny rule matches (regression test for issue 7)
+    user:
+      type: EXTERNAL
+      traits: {}
+    entity:
+      type: NODE
+      labels:
+        'key1' : 'value1'
+        'key2' : 'value2'
+    role:
+      kind: role
+      version: v4
+      metadata:
+        name: test
+      spec:
+        allow:
+          node_labels:
+            'key1' : 'value1'
+            'key2' : 'value2'
+        deny:
+          node_labels:
+            'key1' : 'value1'
+            'key3' : 'value3'
+    allows: False

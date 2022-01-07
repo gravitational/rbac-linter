@@ -416,14 +416,18 @@ def matches_constraint(
 #
 # {'env' : ['test', 'prod'], 'location' : 'us-east-[\d]+' }
 #
+# The constraint_fold parameter is itself a function determining how the
+# sub-constraints should be combined (conjunction or disjunction).
+#
 def matches_constraints(
     constraint_type : str,
     labels          : z3.FuncDeclRef,
     label_keys      : z3.FuncDeclRef,
-    constraints     : dict[str, typing.Union[str, list[str]]]
+    constraints     : dict[str, typing.Union[str, list[str]]],
+    constraint_fold : typing.Callable
   ) -> z3.BoolRef:
   logging.debug(f'Compiling {constraint_type} constraints')
-  return z3.And([
+  return constraint_fold([
     matches_constraint(labels, label_keys, key, value)
     for key, value in constraints.items()
   ])
@@ -439,12 +443,16 @@ def matches_constraints(
 # database_labels:
 #   'contains_PII' : 'no'
 #
+# The constraint_fold parameter is itself a function determining how the
+# sub-constraints should be combined (conjunction or disjunction).
+#
 def matches_constraint_group(
-    group : dict[str, dict[str, typing.Union[str, list[str]]]]
+    group : dict[str, dict[str, typing.Union[str, list[str]]]],
+    constraint_fold : typing.Callable
   ) -> z3.BoolRef:
   return z3.Or([
     constraint_type in group
-    and matches_constraints(constraint_type, labels, label_keys, group[constraint_type])
+    and matches_constraints(constraint_type, labels, label_keys, group[constraint_type], constraint_fold)
     for constraint_type, (labels, label_keys) in entity_types.items()
   ])
 
@@ -467,9 +475,9 @@ def allows(role : typing.Any) -> z3.BoolRef:
   logging.debug(f'Compiling role template {role_name}')
   spec = role['spec']
   logging.debug('Compiling allow constraints')
-  allow_expr = 'allow' in spec and matches_constraint_group(spec['allow'])
+  allow_expr = 'allow' in spec and matches_constraint_group(spec['allow'], z3.And)
   logging.debug('Compiling deny constraints')
-  deny_expr = 'deny' in spec and matches_constraint_group(spec['deny'])
+  deny_expr = 'deny' in spec and matches_constraint_group(spec['deny'], z3.Or)
   return z3.And(allow_expr, z3.Not(deny_expr))
 
 # Determines whether the given role is a role template, filled in by user traits.

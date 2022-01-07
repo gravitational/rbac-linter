@@ -244,7 +244,7 @@ tests:
         name: role1
       spec:
         allow:
-          kubernetes_labels:
+          db_labels:
             'key' : ['value1|value2', '{{external.key}}']
     second-role:
       kind: role
@@ -253,7 +253,7 @@ tests:
         name: role2
       spec:
         allow:
-          kubernetes_labels:
+          db_labels:
             'key' : ['value1', 'value2', '{{external.key}}']
     are-equivalent: True
     is-template: True
