@@ -1,5 +1,6 @@
 # rbac-linter
 [![Build & Test](https://github.com/gravitational/rbac-linter/actions/workflows/ci.yml/badge.svg)](https://github.com/gravitational/rbac-linter/actions/workflows/ci.yml)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 This is an analysis engine for role-based access control (RBAC) in [Teleport](https://goteleport.com/docs/access-controls/guides/role-templates/) using the [Z3 theorem prover](https://github.com/Z3Prover/z3) from Python.
 It enables comparison of role templates for logical equivalence across all possible users and nodes, or to check that one role template is a subset of another or that it implements a specific security policy.
