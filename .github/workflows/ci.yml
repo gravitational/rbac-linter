@@ -26,6 +26,8 @@ jobs:
           requirements: requirements.txt
       - name: Run Python type checking
         run: mypy role_analyzer.py role_query.py role_equivalence_check.py
+      - name: Run Python formatter
+        run: black --check .
       - name: Run Python tests
         run: pytest
       - name: Run Python role equivalence check script
