@@ -8,6 +8,7 @@ from role_analyzer import (
     InterpolationConstraint,
     EmailFunctionConstraint,
     RegexReplaceFunctionConstraint,
+    UserType,
 )
 
 
@@ -21,18 +22,18 @@ def parse_match_any_constraint():
 
 def test_parse_template_constraint():
     values = [
-        ("internal", "key", None),
-        ("external", "key", None),
-        ("internal", "key", "inner"),
-        ("external", "key", "inner"),
+        (UserType.INTERNAL, "key", None),
+        (UserType.EXTERNAL, "key", None),
+        (UserType.INTERNAL, "key", "inner"),
+        (UserType.EXTERNAL, "key", "inner"),
     ]
 
     for value in values:
         expected = UserTraitConstraint(*value)
         unparsed = (
-            f"{{{{{expected.trait_type}.{expected.trait_key}}}}}"
+            f"{{{{{expected.trait_type.value}.{expected.trait_key}}}}}"
             if None == expected.inner_trait_key
-            else f'{{{{{expected.trait_type}.{expected.trait_key}["{expected.inner_trait_key}"]}}}}'
+            else f'{{{{{expected.trait_type.value}.{expected.trait_key}["{expected.inner_trait_key}"]}}}}'
         )
         assert requires_user_traits(unparsed), unparsed
         actual = parse_constraint(unparsed)
@@ -41,18 +42,18 @@ def test_parse_template_constraint():
 
 def test_parse_interpolation_constraint():
     values = [
-        ("prefix", "internal", "key", None, "suffix"),
-        ("prefix", "external", "key", None, "suffix"),
-        ("prefix", "internal", "key", "inner", "suffix"),
-        ("prefix", "external", "key", "inner", "suffix"),
+        ("prefix", UserType.INTERNAL, "key", None, "suffix"),
+        ("prefix", UserType.EXTERNAL, "key", None, "suffix"),
+        ("prefix", UserType.INTERNAL, "key", "inner", "suffix"),
+        ("prefix", UserType.EXTERNAL, "key", "inner", "suffix"),
     ]
 
     for value in values:
         expected = InterpolationConstraint(*value)
         unparsed = (
-            f"{expected.prefix}{{{{{expected.trait_type}.{expected.trait_key}}}}}{expected.suffix}"
+            f"{expected.prefix}{{{{{expected.trait_type.value}.{expected.trait_key}}}}}{expected.suffix}"
             if None == expected.inner_trait_key
-            else f'{expected.prefix}{{{{{expected.trait_type}.{expected.trait_key}["{expected.inner_trait_key}"]}}}}{expected.suffix}'
+            else f'{expected.prefix}{{{{{expected.trait_type.value}.{expected.trait_key}["{expected.inner_trait_key}"]}}}}{expected.suffix}'
         )
         assert requires_user_traits(unparsed), unparsed
         actual = parse_constraint(unparsed)
@@ -61,18 +62,18 @@ def test_parse_interpolation_constraint():
 
 def test_parse_email_function_constraint():
     values = [
-        ("internal", "key", None),
-        ("external", "key", None),
-        ("internal", "key", "inner"),
-        ("external", "key", "inner"),
+        (UserType.INTERNAL, "key", None),
+        (UserType.EXTERNAL, "key", None),
+        (UserType.INTERNAL, "key", "inner"),
+        (UserType.EXTERNAL, "key", "inner"),
     ]
 
     for value in values:
         expected = EmailFunctionConstraint(*value)
         unparsed = (
-            f"{{{{email.local({expected.trait_type}.{expected.trait_key})}}}}"
+            f"{{{{email.local({expected.trait_type.value}.{expected.trait_key})}}}}"
             if None == expected.inner_trait_key
-            else f'{{{{email.local({expected.trait_type}.{expected.trait_key}["{expected.inner_trait_key}"])}}}}'
+            else f'{{{{email.local({expected.trait_type.value}.{expected.trait_key}["{expected.inner_trait_key}"])}}}}'
         )
         assert requires_user_traits(unparsed), unparsed
         actual = parse_constraint(unparsed)
@@ -81,18 +82,18 @@ def test_parse_email_function_constraint():
 
 def test_parse_regexp_replace_function_constraint():
     values = [
-        ("internal", "key", None, "pattern", "replacement"),
-        ("external", "key", None, "pattern", "replacement"),
-        ("internal", "key", "inner", "pattern", "replacement"),
-        ("external", "key", "inner", "pattern", "replacement"),
+        (UserType.INTERNAL, "key", None, "pattern", "replacement"),
+        (UserType.EXTERNAL, "key", None, "pattern", "replacement"),
+        (UserType.INTERNAL, "key", "inner", "pattern", "replacement"),
+        (UserType.EXTERNAL, "key", "inner", "pattern", "replacement"),
     ]
 
     for value in values:
         expected = RegexReplaceFunctionConstraint(*value)
         unparsed = (
-            f'{{{{regexp.replace({expected.trait_type}.{expected.trait_key}, "{expected.pattern}", "{expected.replace}")}}}}'
+            f'{{{{regexp.replace({expected.trait_type.value}.{expected.trait_key}, "{expected.pattern}", "{expected.replace}")}}}}'
             if None == expected.inner_trait_key
-            else f'{{{{regexp.replace({expected.trait_type}.{expected.trait_key}["{expected.inner_trait_key}"], "{expected.pattern}", "{expected.replace}")}}}}'
+            else f'{{{{regexp.replace({expected.trait_type.value}.{expected.trait_key}["{expected.inner_trait_key}"], "{expected.pattern}", "{expected.replace}")}}}}'
         )
         assert requires_user_traits(unparsed), unparsed
         actual = parse_constraint(unparsed)

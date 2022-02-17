@@ -7,56 +7,151 @@ import sre_parse
 import typing
 import z3  # type: ignore
 
-# Z3 Node Constants
-app_labels = z3.Function("app_labels", z3.StringSort(), z3.StringSort())
-app_label_keys = z3.Function("app_label_keys", z3.StringSort(), z3.BoolSort())
-node_labels = z3.Function("node_labels", z3.StringSort(), z3.StringSort())
-node_label_keys = z3.Function("node_label_keys", z3.StringSort(), z3.BoolSort())
-k8s_labels = z3.Function("k8s_labels", z3.StringSort(), z3.StringSort())
-k8s_label_keys = z3.Function("k8s_label_keys", z3.StringSort(), z3.BoolSort())
-db_labels = z3.Function("db_labels", z3.StringSort(), z3.StringSort())
-db_label_keys = z3.Function("db_label_keys", z3.StringSort(), z3.BoolSort())
-entity_types = {
-    "app_labels": (app_labels, app_label_keys),
-    "node_labels": (node_labels, node_label_keys),
-    "kubernetes_labels": (k8s_labels, k8s_label_keys),
-    "db_labels": (db_labels, db_label_keys),
-}
+
+@dataclass
+class EntityTypeInfo:
+    """
+    Information about an entity type (node, k8s cluster, etc.)
+
+    ----------------------------------------------------------------------
+    Attributes defined here:
+
+    name: str
+        The short human-readable name identifying the entity.
+
+    labels_name: str
+        The name used for the entity's labels in role YAML files.
+
+    ----------------------------------------------------------------------
+    """
+
+    name: str
+    labels_name: str
 
 
 class EntityType(Enum):
-    APP = (app_labels, app_label_keys)
-    NODE = (node_labels, node_label_keys)
-    K8S = (k8s_labels, k8s_label_keys)
-    DB = (db_labels, db_label_keys)
+    """
+    An enumeration of all supported entity types. New entity types should be
+    added here.
+    """
+
+    APP: EntityTypeInfo = EntityTypeInfo("app", "app_labels")
+    NODE: EntityTypeInfo = EntityTypeInfo("node", "node_labels")
+    K8S: EntityTypeInfo = EntityTypeInfo("k8s", "kubernetes_labels")
+    DB: EntityTypeInfo = EntityTypeInfo("db", "db_labels")
 
 
 def other_entity_types(entity_type: EntityType) -> list[EntityType]:
+    """
+    Gets an enumeration of all entity types except the given one.
+    """
     return list(filter(lambda e: e != entity_type, EntityType))
 
 
-# Z3 User Constants
-internal_traits = z3.Function(
-    "internal_traits", z3.StringSort(), z3.StringSort(), z3.BoolSort()
-)
-external_traits = z3.Function(
-    "external_traits", z3.StringSort(), z3.StringSort(), z3.BoolSort()
-)
-template_types = {"internal": internal_traits, "external": external_traits}
+@dataclass
+class EntityAttributes:
+    """
+    The Z3 variables modeling entities, on which constraints are placed.
+
+    ----------------------------------------------------------------------
+    Attributes defined here:
+
+    keys: z3.FuncDeclRef
+        The set of all label keys which must be possessed by an entity.
+        Should be a Z3 function from string to bool.
+
+    labels: z3.FuncDeclRef
+        The actual key/value labels which must be possessed by an entity.
+        Should be a Z3 function from string to string.
+
+    ----------------------------------------------------------------------
+    """
+
+    keys: z3.FuncDeclRef
+    labels: z3.FuncDeclRef
 
 
 class UserType(Enum):
-    INTERNAL = internal_traits
-    EXTERNAL = external_traits
+    INTERNAL: str = "internal"
+    EXTERNAL: str = "external"
 
 
-def other_user_type(user_type: UserType) -> UserType:
+def get_other_user_type(user_type: UserType) -> UserType:
     if UserType.INTERNAL == user_type:
         return UserType.EXTERNAL
     elif UserType.EXTERNAL == user_type:
         return UserType.INTERNAL
     else:
         raise ValueError(f"Invalid user type {user_type}")
+
+
+def get_user_type(user_type_str: str) -> UserType:
+    for user_type in UserType:
+        if user_type.value == user_type_str:
+            return user_type
+    raise ValueError(f"Invalid user type {user_type_str}")
+
+
+@dataclass
+class AuthzContext:
+    """
+    The context for a given authorization analysis. Used to encapsulate the
+    variables on which constraints are placed.
+
+    ----------------------------------------------------------------------
+    Attributes defined here:
+
+    entities: dict[EntityType, EntityAttributes]
+        A map from all entity types to their Z3 variables.
+
+    users: dict[UserType, z3.FuncDeclRef]
+        A map from all user types to their Z3 variables.
+    ----------------------------------------------------------------------
+    """
+
+    entities: dict[EntityType, EntityAttributes]
+
+    users: dict[UserType, z3.FuncDeclRef]
+
+    def __init__(self, uninterpreted: bool):
+        """
+        Initializes a new instance of the AuthzContext object.
+
+        ------------------------------------------------------------------
+        Parameters:
+
+        uninterpreted: bool
+            If true, construct the Z3 variables as uninterpreted functions
+            on which constraints are placed; if false, construct the Z3
+            variables as functions with actual definitions (to be provided
+            later) against which constraints are checked. Generally
+            uninterpreted functions are used when comparing two roles in
+            the abstract and defined functions are used when determining
+            whether a user has access to a resource through a role.
+        """
+        z3_func_constructor = z3.Function if uninterpreted else z3.RecFunction
+        self.entities = {}
+        self.users = {}
+        for entity_type in EntityType:
+            self.entities[entity_type] = EntityAttributes(
+                z3_func_constructor(
+                    f"{entity_type.value.name}_attribute_keys",
+                    z3.StringSort(),
+                    z3.BoolSort(),
+                ),
+                z3_func_constructor(
+                    f"{entity_type.value.name}_attribute_labels",
+                    z3.StringSort(),
+                    z3.StringSort(),
+                ),
+            )
+        for user_type in UserType:
+            self.users[user_type] = z3_func_constructor(
+                f"{user_type.value}_traits",
+                z3.StringSort(),
+                z3.StringSort(),
+                z3.BoolSort(),
+            )
 
 
 @dataclass
@@ -76,7 +171,7 @@ class RegexConstraint:
 
 @dataclass
 class UserTraitConstraint:
-    trait_type: str
+    trait_type: UserType
     trait_key: str
     inner_trait_key: str
 
@@ -84,7 +179,7 @@ class UserTraitConstraint:
 @dataclass
 class InterpolationConstraint:
     prefix: str
-    trait_type: str
+    trait_type: UserType
     trait_key: str
     inner_trait_key: str
     suffix: str
@@ -92,22 +187,24 @@ class InterpolationConstraint:
 
 @dataclass
 class EmailFunctionConstraint:
-    trait_type: str
+    trait_type: UserType
     trait_key: str
     inner_trait_key: str
 
 
 @dataclass
 class RegexReplaceFunctionConstraint:
-    trait_type: str
+    trait_type: UserType
     trait_key: str
     inner_trait_key: str
     pattern: str
     replace: str
 
 
-# Attempts to parse the given value as a regex.
 def try_parse_regex(value: str) -> typing.Optional[RegexConstraint]:
+    """
+    Attempts to parse the given value as a regex.
+    """
     try:
         parsed_regex = sre_parse.parse(value)
         is_regex = any(
@@ -124,11 +221,14 @@ template_value_pattern = re.compile(
     r'\{\{(?P<type>internal|external)\.(?P<key>[\w]+)(\["(?P<inner_key>[\w]+)"\])?\}\}'
 )
 
-# Attempts to parse template constraints of type {{internal.logins}}
+
 def try_parse_template(value: str) -> typing.Optional[UserTraitConstraint]:
+    """
+    Attempts to parse template constraints of type {{internal.logins}}
+    """
     match = template_value_pattern.match(value)
     if isinstance(match, re.Match):
-        user_type = match.group("type")
+        user_type = get_user_type(match.group("type"))
         trait_key = match.group("key")
         inner_trait_key = match.group("inner_key")
         return UserTraitConstraint(user_type, trait_key, inner_trait_key)
@@ -141,12 +241,15 @@ interpolation_value_pattern = re.compile(
     r'(?P<prefix>.*)\{\{(?P<type>internal|external)\.(?P<key>[\w]+)(\["(?P<inner_key>[\w]+)"\])?\}\}(?P<suffix>.*)'
 )
 
-# Attempts to parse interpolation constraints of type IAM#{external.foo}
+
 def try_parse_interpolation(value: str) -> typing.Optional[InterpolationConstraint]:
+    """
+    Attempts to parse interpolation constraints of type IAM#{external.foo}
+    """
     match = interpolation_value_pattern.match(value)
     if isinstance(match, re.Match):
         prefix = match.group("prefix")
-        user_type = match.group("type")
+        user_type = get_user_type(match.group("type"))
         trait_key = match.group("key")
         inner_trait_key = match.group("inner_key")
         suffix = match.group("suffix")
@@ -162,11 +265,15 @@ email_function_value_pattern = re.compile(
     r'\{\{email\.local\([\s]*(?P<type>internal|external)\.(?P<key>[\w]+)(\["(?P<inner_key>[\w]+)"\])?[\s]*\)\}\}'
 )
 
-# Attempts to parse email function constraints of type {{email.local(external.email)}}
+
 def try_parse_email_function(value: str) -> typing.Optional[EmailFunctionConstraint]:
+    """
+    Attempts to parse email function constraints of type
+    {{email.local(external.email)}}
+    """
     match = email_function_value_pattern.match(value)
     if isinstance(match, re.Match):
-        user_type = match.group("type")
+        user_type = get_user_type(match.group("type"))
         trait_key = match.group("key")
         inner_trait_key = match.group("inner_key")
         return EmailFunctionConstraint(user_type, trait_key, inner_trait_key)
@@ -179,13 +286,17 @@ regex_function_value_pattern = re.compile(
     r'\{\{regexp\.replace\([\s]*(?P<type>internal|external)\.(?P<key>[\w]+)(\["(?P<inner_key>[\w]+)"\])?[\s]*,[\s]*"(?P<pattern>.*)"[\s]*,[\s]*"(?P<replace>.*)"[\s]*\)\}\}'
 )
 
-# Attempts to parse regexp replace function constraints of type {{regexp.replace(external.access, "foo", "bar")}}
+
 def try_parse_regexp_replace_function(
     value: str,
 ) -> typing.Optional[RegexReplaceFunctionConstraint]:
+    """
+    Attempts to parse regexp replace function constraints of type
+    {{regexp.replace(external.access, "foo", "bar")}}
+    """
     match = regex_function_value_pattern.match(value)
     if isinstance(match, re.Match):
-        user_type = match.group("type")
+        user_type = get_user_type(match.group("type"))
         trait_key = match.group("key")
         inner_trait_key = match.group("inner_key")
         pattern = match.group("pattern")
@@ -197,8 +308,10 @@ def try_parse_regexp_replace_function(
         return None
 
 
-# Determines whether the given constraint requires user traits to specify.
 def requires_user_traits(values: typing.Union[str, list[str]]) -> bool:
+    """
+    Determines whether the given constraint requires user traits to specify.
+    """
     if not isinstance(values, list):
         values = [values]
     for value in values:
@@ -216,7 +329,6 @@ def requires_user_traits(values: typing.Union[str, list[str]]) -> bool:
     return False
 
 
-# Determines the category of the constraint value and parses it appropriately.
 def parse_constraint(
     value: str,
 ) -> typing.Union[
@@ -228,6 +340,9 @@ def parse_constraint(
     EmailFunctionConstraint,
     RegexReplaceFunctionConstraint,
 ]:
+    """
+    Determines the category of the constraint value and parses it appropriately.
+    """
 
     if "*" == value:
         return AnyValueConstraint(value)
@@ -255,21 +370,27 @@ def parse_constraint(
     return StringConstraint(value)
 
 
-# The Z3 regex matching all strings accepted by re1 but not re2.
-# Formatted in camelcase to mimic Z3 regex API.
 def Minus(re1: z3.ReRef, re2: z3.ReRef) -> z3.ReRef:
+    """
+    The Z3 regex matching all strings accepted by re1 but not re2.
+    Formatted in camelcase to mimic Z3 regex API.
+    """
     return z3.Intersect(re1, z3.Complement(re2))
 
 
-# The Z3 regex matching any character (currently only ASCII supported).
-# Formatted in camelcase to mimic Z3 regex API.
 def AnyChar() -> z3.ReRef:
+    """
+    The Z3 regex matching any character (currently only ASCII supported).
+    Formatted in camelcase to mimic Z3 regex API.
+    """
     return z3.Range(chr(0), chr(127))
     # return z3.AllChar(z3.StringSort())
 
 
-# Defines regex categories in Z3.
 def category_regex(category: sre_constants._NamedIntConstant) -> z3.ReRef:
+    """
+    Defines regex categories in Z3.
+    """
     if sre_constants.CATEGORY_DIGIT == category:
         return z3.Range("0", "9")
     elif sre_constants.CATEGORY_SPACE == category:
@@ -286,8 +407,10 @@ def category_regex(category: sre_constants._NamedIntConstant) -> z3.ReRef:
         )
 
 
-# Translates a specific regex construct into its Z3 equivalent.
 def regex_construct_to_z3_expr(regex_construct) -> z3.ReRef:
+    """
+    Translates a specific regex construct into its Z3 equivalent.
+    """
     node_type, node_value = regex_construct
     if sre_constants.LITERAL == node_type:  # a
         return z3.Re(chr(node_value))
@@ -375,9 +498,11 @@ def regex_construct_to_z3_expr(regex_construct) -> z3.ReRef:
         )
 
 
-# Translates a parsed regex into its Z3 equivalent.
-# The parsed regex is a sequence of regex constructs (literals, *, +, etc.)
 def regex_to_z3_expr(regex: sre_parse.SubPattern) -> z3.ReRef:
+    """
+    Translates a parsed regex into its Z3 equivalent.
+    The parsed regex is a sequence of regex constructs (literals, *, +, etc.)
+    """
     if 0 == len(regex.data):
         raise ValueError("ERROR: regex is empty")
     elif 1 == len(regex.data):
@@ -388,14 +513,18 @@ def regex_to_z3_expr(regex: sre_parse.SubPattern) -> z3.ReRef:
         )
 
 
-# Constructs an expression evaluating whether a specific label constraint
-# is satisfied by a given node, database, or k8s cluster.
-# Example value for key : value parameters:
-#
-# 'location' : 'us-east-[\d]+'
-# 'owner' : {{external.email}}
-#
-def matches_value(labels: z3.FuncDeclRef, key: z3.SeqRef, value: str) -> z3.BoolRef:
+def matches_value(
+    authz_context: AuthzContext, entity_type: EntityType, key: z3.SeqRef, value: str
+) -> z3.BoolRef:
+    """
+    Constructs an expression evaluating whether a specific label constraint
+    is satisfied by a given node, database, or k8s cluster.
+    Example value for key : value parameters:
+
+    'location' : 'us-east-[\\d]+'
+    'owner' : {{external.email}}
+    """
+    labels = authz_context.entities[entity_type].labels
     constraint = parse_constraint(value)
     # 'key' : '*'
     if isinstance(constraint, AnyValueConstraint):
@@ -416,9 +545,9 @@ def matches_value(labels: z3.FuncDeclRef, key: z3.SeqRef, value: str) -> z3.Bool
         )
         if None != constraint.inner_trait_key:
             raise NotImplementedError(f"Nested trait maps are not supported: {value}")
-        user_trait_type = template_types[constraint.trait_type]
+        user_traits = authz_context.users[constraint.trait_type]
         user_trait_key = z3.StringVal(constraint.trait_key)
-        return user_trait_type(user_trait_key, labels(key))
+        return user_traits(user_trait_key, labels(key))
     # 'key' : 'prefix#{internal.trait_key}#suffix'
     elif isinstance(constraint, InterpolationConstraint):
         logging.debug(
@@ -428,10 +557,10 @@ def matches_value(labels: z3.FuncDeclRef, key: z3.SeqRef, value: str) -> z3.Bool
             raise NotImplementedError(f"Nested trait maps are not supported: {value}")
         prefix = z3.StringVal(constraint.prefix)
         suffix = z3.StringVal(constraint.suffix)
-        user_trait_type = template_types[constraint.trait_type]
+        user_traits = authz_context.users[constraint.trait_type]
         user_trait_key = z3.StringVal(constraint.trait_key)
         user_trait_value = z3.String(f"{constraint.trait_type}_{constraint.trait_key}")
-        is_user_trait_value = user_trait_type(user_trait_key, user_trait_value)
+        is_user_trait_value = user_traits(user_trait_key, user_trait_value)
         label_equals_interpolation = labels(key) == z3.Concat(
             prefix, user_trait_value, suffix
         )
@@ -445,12 +574,12 @@ def matches_value(labels: z3.FuncDeclRef, key: z3.SeqRef, value: str) -> z3.Bool
         )
         if None != constraint.inner_trait_key:
             raise NotImplementedError(f"Nested trait maps are not supported: {value}")
-        user_trait_type = template_types[constraint.trait_type]
+        user_traits = authz_context.users[constraint.trait_type]
         user_trait_key = z3.StringVal(constraint.trait_key)
         user_trait_value = z3.String(
             f"{constraint.trait_type}_{constraint.trait_key}_email"
         )
-        is_user_trait_value = user_trait_type(user_trait_key, user_trait_value)
+        is_user_trait_value = user_traits(user_trait_key, user_trait_value)
         index_end_of_local = z3.IndexOf(user_trait_value, z3.StringVal("@"))
         label_equals_email_local = labels(key) == z3.SubString(
             user_trait_value, z3.IntVal(0), index_end_of_local
@@ -472,19 +601,20 @@ def matches_value(labels: z3.FuncDeclRef, key: z3.SeqRef, value: str) -> z3.Bool
         )
 
 
-# Constructs an expression evaluating whether a specific label constraint
-# is satisfied by a given node, database, or k8s cluster; constraint can
-# take the form of a list of permissible values.
-# Example value for key : value parameters:
-#
-# 'env' : ['test', 'prod']
-#
 def matches_constraint(
-    labels: z3.FuncDeclRef,
-    label_keys: z3.FuncDeclRef,
+    authz_context: AuthzContext,
+    entity_type: EntityType,
     key: str,
     value: typing.Union[str, list[str]],
 ) -> z3.BoolRef:
+    """
+    Constructs an expression evaluating whether a specific label constraint
+    is satisfied by a given node, database, or k8s cluster; constraint can
+    take the form of a list of permissible values.
+    Example value for key : value parameters:
+
+    'env' : ['test', 'prod']
+    """
     logging.debug(f"Compiling {key} : {value} constraint")
     if "*" == key:
         if "*" == value:
@@ -493,105 +623,120 @@ def matches_constraint(
             raise ValueError(f"Constraint of type '*' : {value} is not valid")
 
     key = z3.StringVal(key)
+    label_keys = authz_context.entities[entity_type].keys
     if isinstance(value, list):
         return z3.And(
-            label_keys(key), z3.Or([matches_value(labels, key, v) for v in value])
+            label_keys(key),
+            z3.Or([matches_value(authz_context, entity_type, key, v) for v in value]),
         )
     else:
-        return z3.And(label_keys(key), matches_value(labels, key, value))
+        return z3.And(
+            label_keys(key), matches_value(authz_context, entity_type, key, value)
+        )
 
 
-# Constructs an expression evaluating to whether a given set of label
-# requirements are satisfied by a given node, database, or k8s cluster.
-# Example value for constraints parameter:
-#
-# {'env' : ['test', 'prod'], 'location' : 'us-east-[\d]+' }
-#
-# The constraint_fold parameter is itself a function determining how the
-# sub-constraints should be combined (conjunction or disjunction).
-#
 def matches_constraints(
-    constraint_type: str,
-    labels: z3.FuncDeclRef,
-    label_keys: z3.FuncDeclRef,
+    authz_context: AuthzContext,
+    entity_type: EntityType,
     constraints: dict[str, typing.Union[str, list[str]]],
     constraint_fold: typing.Callable,
 ) -> z3.BoolRef:
-    logging.debug(f"Compiling {constraint_type} constraints")
+    """
+    Constructs an expression evaluating to whether a given set of label
+    requirements are satisfied by a given node, database, or k8s cluster.
+    Example value for constraints parameter:
+
+    {'env' : ['test', 'prod'], 'location' : 'us-east-[\\d]+' }
+
+    The constraint_fold parameter is itself a function determining how the
+    sub-constraints should be combined (conjunction or disjunction).
+    """
+    logging.debug(f"Compiling {entity_type} constraints")
     return constraint_fold(
         [
-            matches_constraint(labels, label_keys, key, value)
+            matches_constraint(authz_context, entity_type, key, value)
             for key, value in constraints.items()
         ]
     )
 
 
-# Constructs an expression evaluating to whether a given constraint group
-# (either Allow or Deny) matches the labels of a given node, database, or
-# k8s cluster.
-# Example value for group parameter:
-#
-# node_labels:
-#   'env' : 'test'
-#   'owner' : '.*@email.com'
-# database_labels:
-#   'contains_PII' : 'no'
-#
-# The constraint_fold parameter is itself a function determining how the
-# sub-constraints should be combined (conjunction or disjunction).
-#
 def matches_constraint_group(
+    authz_context: AuthzContext,
     group: dict[str, dict[str, typing.Union[str, list[str]]]],
     constraint_fold: typing.Callable,
 ) -> z3.BoolRef:
+    """
+    Constructs an expression evaluating to whether a given constraint group
+    (either Allow or Deny) matches the labels of a given node, database, or
+    k8s cluster.
+    Example value for group parameter:
+
+    node_labels:
+      'env' : 'test'
+      'owner' : '.*@email.com'
+    database_labels:
+      'contains_PII' : 'no'
+
+    The constraint_fold parameter is itself a function determining how the
+    sub-constraints should be combined (conjunction or disjunction).
+    """
     return z3.Or(
         [
-            constraint_type in group
+            (entity_type_name := entity_type.value.labels_name) in group
             and matches_constraints(
-                constraint_type,
-                labels,
-                label_keys,
-                group[constraint_type],
+                authz_context,
+                entity_type,
+                group[entity_type_name],
                 constraint_fold,
             )
-            for constraint_type, (labels, label_keys) in entity_types.items()
+            for entity_type in EntityType
         ]
     )
 
 
-# Constructs an expression evaluating to whether a given role
-# gives access to a specific node, database, or k8s cluster.
-# Example value for role parameter:
-#
-# spec:
-#  allow:
-#    node_labels:
-#      'env' : 'test'
-#    kubernetes_labels:
-#      'service' : 'company_app'
-#  deny:
-#    node_labels:
-#      'env' : 'prod'
-#
-def allows(role: typing.Any) -> z3.BoolRef:
+def allows(authz_context: AuthzContext, role: typing.Any) -> z3.BoolRef:
+    """
+    Constructs an expression evaluating to whether a given role
+    gives access to a specific node, database, or k8s cluster.
+    Example value for role parameter:
+
+    spec:
+     allow:
+       node_labels:
+         'env' : 'test'
+       kubernetes_labels:
+         'service' : 'company_app'
+     deny:
+       node_labels:
+         'env' : 'prod'
+    """
     role_name = role["metadata"]["name"]
     logging.debug(f"Compiling role template {role_name}")
     spec = role["spec"]
     logging.debug("Compiling allow constraints")
-    allow_expr = "allow" in spec and matches_constraint_group(spec["allow"], z3.And)
+    allow_expr = "allow" in spec and matches_constraint_group(
+        authz_context, spec["allow"], z3.And
+    )
     logging.debug("Compiling deny constraints")
-    deny_expr = "deny" in spec and matches_constraint_group(spec["deny"], z3.Or)
+    deny_expr = "deny" in spec and matches_constraint_group(
+        authz_context, spec["deny"], z3.Or
+    )
     return z3.And(allow_expr, z3.Not(deny_expr))
 
 
-# Determines whether the given role is a role template, filled in by user traits.
 def is_role_template(role) -> bool:
+    """
+    Determines whether the given role is a role template, filled in by user
+    traits.
+    """
     spec = role["spec"]
     if "allow" in spec:
         allow = spec["allow"]
         groups = [
             allow[constraint_type].values()
-            for constraint_type in entity_types.keys()
+            for constraint_type in [
+                entity_type.value.labels_name for entity_type in EntityType
+            ]
             if constraint_type in allow
         ]
         if any([requires_user_traits(value) for values in groups for value in values]):
@@ -601,7 +746,9 @@ def is_role_template(role) -> bool:
         deny = spec["deny"]
         groups = [
             deny[constraint_type]
-            for constraint_type in entity_types.keys()
+            for constraint_type in [
+                entity_type.value.labels_name for entity_type in EntityType
+            ]
             if constraint_type in deny
         ]
         if any([requires_user_traits(value) for values in groups for value in values]):
@@ -610,134 +757,143 @@ def is_role_template(role) -> bool:
     return False
 
 
-# Compiles the labels of a given app, node, k8s cluster, or database into a
-# form understood by Z3 that can be checked against a compiled set of role
-# constraints.
-def labels_as_z3_map(
-    concrete_labels: typing.Optional[dict[str, str]], entity_type: EntityType
+def Case(
+    key: z3.SeqRef,
+    cases: list[tuple[str, typing.Any]],
+    case_transform: typing.Callable[[typing.Any], z3.BoolRef],
+    other: z3.BoolRef,
 ) -> z3.BoolRef:
-    logging.debug(f"Compiling labels {concrete_labels} of type {entity_type.name}")
-    # Specify unused entity types have no label values
-    others_unused = z3.BoolVal(True)
-    for other_entity_type in other_entity_types(entity_type):
-        _, other_label_keys = other_entity_type.value
-        any_key = z3.String(f"{other_entity_type.name}_any_key")
-        other_unused = z3.ForAll(any_key, z3.Not(other_label_keys(any_key)))
-        others_unused = z3.And(others_unused, other_unused)
-
-    labels, label_keys = entity_type.value
-    # It isn't enough to specify which values are in the set, we must also
-    # specify which values are *not* in the set. Otherwise Z3 finds the
-    # trivial set model [else -> True] which contains all string values.
-    if concrete_labels is not None and any(concrete_labels):
-        included = z3.And(
-            [label_keys(z3.StringVal(key)) for key in concrete_labels.keys()]
-        )
-        excluded_key = z3.String("excluded_key")
-        is_excluded_key = z3.And(
-            [excluded_key != z3.StringVal(key) for key in concrete_labels.keys()]
-        )
-        excluded = z3.Implies(is_excluded_key, z3.Not(label_keys(excluded_key)))
-        restrictive_key_set = z3.And(included, z3.ForAll(excluded_key, excluded))
-        return z3.And(
-            others_unused,
-            restrictive_key_set,
-            z3.And(
-                [
-                    labels(z3.StringVal(key)) == z3.StringVal(value)
-                    for key, value in concrete_labels.items()
-                ]
-            ),
-        )
+    """
+    Builds a case-type expression up out of a list of string tuples using Z3's
+    If expression. Terminates the case expression in the other parameter.
+    Transforms the case values with the case_transform parameter.
+    """
+    if [] == cases:
+        return other
     else:
-        any_key = z3.String(f"{entity_type.name}_any_key")
-        this_unused = z3.ForAll(any_key, z3.Not(label_keys(any_key)))
-        return z3.And(others_unused, this_unused)
+        head, *tail = cases
+        if_key, then_value = head
+        return z3.If(
+            key == z3.StringVal(if_key),
+            case_transform(then_value),
+            Case(key, tail, case_transform, other),
+        )
 
 
-# Compiles the traits of a given internal or external user into a form
-# understood by Z3 that can be checked against a compiled set of role constraints.
-def traits_as_z3_map(
-    concrete_traits: typing.Optional[dict[str, list[str]]], user_type: UserType
-) -> typing.Optional[z3.BoolRef]:
-    logging.debug(f"Compiling user traits {concrete_traits} of type {user_type.name}")
+def labels_as_z3_map(
+    authz_context: AuthzContext,
+    concrete_labels: typing.Optional[dict[str, str]],
+    entity_type: EntityType,
+):
+    """
+    Compiles the labels of a given app, node, k8s cluster, or database into a
+    form understood by Z3 that can be checked against a compiled set of role
+    constraints.
+    """
+    logging.debug(f"Compiling labels {concrete_labels} of type {entity_type.name}")
 
-    # Specify unused user type has no trait values
-    other_traits = other_user_type(user_type)
-    any_key = z3.String(f"{other_traits.name}_any_key")
-    any_value = z3.String(f"{other_traits.name}_any_value")
-    other_is_unused = z3.ForAll(
-        [any_key, any_value], z3.Not(other_traits.value(any_key, any_value))
+    # Add definition of required keys function.
+    required_key = z3.String(f"{entity_type.value.name}_required_key")
+    z3.RecAddDefinition(
+        authz_context.entities[entity_type].keys,
+        [required_key],
+        z3.BoolVal(False)
+        if concrete_labels is None
+        else z3.Or(
+            [required_key == z3.StringVal(key) for key in concrete_labels.keys()]
+        ),
     )
 
-    traits = user_type.value
-    # It isn't enough to specify which values are in the set, we must also
-    # specify which values are *not* in the set. Otherwise Z3 finds the
-    # trivial set model [else -> True] which contains all string values.
-    if concrete_traits is not None and any(concrete_traits):
-        included = z3.And(
-            [
-                traits(z3.StringVal(key), (z3.StringVal(value)))
-                for key, values in concrete_traits.items()
-                for value in values
-            ]
+    # Add definition of required labels function.
+    label_key = z3.String(f"{entity_type.value.name}_label_key")
+    z3.RecAddDefinition(
+        authz_context.entities[entity_type].labels,
+        [label_key],
+        Case(
+            label_key,
+            [] if concrete_labels is None else list(concrete_labels.items()),
+            z3.StringVal,
+            z3.Empty(z3.StringSort()),
+        ),
+    )
+
+    # Specify unused entity types have no required keys and no defined labels.
+    for other_entity_type in other_entity_types(entity_type):
+        required_key = z3.String(f"{other_entity_type.value.name}_required_key")
+        z3.RecAddDefinition(
+            authz_context.entities[other_entity_type].keys,
+            [required_key],
+            z3.BoolVal(False),
         )
-        excluded_key = z3.String("excluded_key")
-        any_value = z3.String("any_value")
-        is_excluded_key = z3.And(
-            [excluded_key != z3.StringVal(key) for key in concrete_traits.keys()]
+        label_key = z3.String(f"{other_entity_type.value.name}_label_key")
+        z3.RecAddDefinition(
+            authz_context.entities[other_entity_type].labels,
+            [label_key],
+            z3.Empty(z3.StringSort()),
         )
-        excluded_keys_excluded = z3.Implies(
-            is_excluded_key, z3.Not(traits(excluded_key, any_value))
-        )
-        exclude_excluded_keys = z3.ForAll(
-            [excluded_key, any_value], excluded_keys_excluded
-        )
-        included_key = z3.String("included_key")
-        excluded_value = z3.String("excluded_value")
-        is_included_key = z3.Or(
-            [included_key == z3.StringVal(key) for key in concrete_traits.keys()]
-        )
-        is_excluded_value = z3.And(
-            [
-                z3.Implies(
-                    included_key == z3.StringVal(key),
-                    excluded_value != z3.StringVal(value),
-                )
-                for key, values in concrete_traits.items()
-                for value in values
-            ]
-        )
-        excluded_values_excluded = z3.Implies(
-            z3.And(is_included_key, is_excluded_value),
-            z3.Not(traits(included_key, excluded_value)),
-        )
-        exclude_excluded_values = z3.ForAll(
-            [included_key, excluded_value], excluded_values_excluded
-        )
-        return z3.And(
-            other_is_unused, included, exclude_excluded_keys, exclude_excluded_values
-        )
-    else:  # User does not have any traits.
-        any_key = z3.String(f"{user_type.name}_any_key")
-        any_value = z3.String(f"{user_type.name}_any_value")
-        this_is_unused = z3.ForAll(
-            [any_key, any_value], z3.Not(traits(any_key, any_value))
-        )
-        return z3.And(other_is_unused, this_is_unused)
 
 
-# Determines whether the given role provides the user access to the entity.
-# Does not check whether the user actually possesses that role.
+def traits_as_z3_map(
+    authz_context: AuthzContext,
+    concrete_traits: dict[str, list[str]],
+    user_type: UserType,
+):
+    """
+    Compiles the traits of a given internal or external user into a form
+    understood by Z3 that can be checked against a compiled set of role
+    constraints.
+    """
+    logging.debug(f"Compiling user traits {concrete_traits} of type {user_type.name}")
+
+    # Add definition of required user traits.
+    user_trait_key = z3.String(f"{user_type.value}_trait_key")
+    user_trait_value = z3.String(f"{user_type.value}_trait_value")
+    z3.RecAddDefinition(
+        authz_context.users[user_type],
+        [user_trait_key, user_trait_value],
+        Case(
+            user_trait_key,
+            list(concrete_traits.items()),
+            lambda traits: z3.Or(
+                [user_trait_value == z3.StringVal(trait) for trait in traits]
+            ),
+            z3.BoolVal(False),
+        ),
+    )
+
+    # Specify unused user type has no trait values.
+    other_user_type = get_other_user_type(user_type)
+    other_user_trait_key = z3.String(f"{other_user_type.value}_trait_key")
+    other_user_trait_value = z3.String(f"{other_user_type.value}_trait_value")
+    z3.RecAddDefinition(
+        authz_context.users[other_user_type],
+        [other_user_trait_key, other_user_trait_value],
+        z3.BoolVal(False),
+    )
+
+
 def role_allows_user_access_to_entity(
     role: typing.Any,
     user_traits: typing.Optional[dict[str, list[str]]],
-    user_type: UserType,
+    user_type: typing.Optional[UserType],
     entity_labels: dict[str, str],
     entity_type: EntityType,
-    solver: z3.Solver = z3.Solver(),
+    solver: z3.Solver,
 ) -> bool:
-    solver.add(traits_as_z3_map(user_traits, user_type))
-    solver.add(labels_as_z3_map(entity_labels, entity_type))
-    solver.add(allows(role))
-    return z3.sat == solver.check()
+    """
+    Determines whether the given role provides the user access to the entity.
+    Does not check whether the user actually possesses that role.
+    """
+    authz_context = AuthzContext(False)
+    if user_traits is not None and user_type is not None:
+        traits_as_z3_map(authz_context, user_traits, user_type)
+    labels_as_z3_map(authz_context, entity_labels, entity_type)
+    allows_expr = allows(authz_context, role)
+    logging.debug(allows_expr)
+    solver.add(allows_expr)
+    result = solver.check()
+    if z3.sat == result:
+        logging.debug(solver.model())
+        return True
+    else:
+        return False
