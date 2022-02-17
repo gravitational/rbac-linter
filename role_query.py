@@ -7,6 +7,7 @@ from role_analyzer import (
     traits_as_z3_map,
     EntityType,
     UserType,
+    AuthzContext
 )
 import yaml
 from z3 import Solver, sat  # type: ignore
@@ -14,11 +15,12 @@ from z3 import Solver, sat  # type: ignore
 
 def node_matches_role(nodes, roles):
     s = Solver()
+    authz_context = AuthzContext(False)
     for node in nodes:
         s.push()
         node_name = node["spec"]["hostname"]
         node_labels = node["metadata"]["labels"]
-        s.add(labels_as_z3_map(node_labels, EntityType.NODE))
+        labels_as_z3_map(authz_context, node_labels, EntityType.NODE)
         for role in roles:
             role_name = role["metadata"]["name"]
             if is_role_template(role):
@@ -38,17 +40,18 @@ def node_matches_role(nodes, roles):
 
 def node_matches_user(nodes, roles, users):
     s = Solver()
+    authz_context = AuthzContext(False)
     for node in nodes:
         s.push()
         node_name = node["spec"]["hostname"]
         node_labels = node["metadata"]["labels"]
-        s.add(labels_as_z3_map(node_labels, EntityType.NODE))
+        labels_as_z3_map(authz_context, node_labels, EntityType.NODE)
 
         for user in users:
             s.push()
             user_name = user["metadata"]["name"]
             user_traits = user["spec"]["traits"]
-            s.add(traits_as_z3_map(user_traits, UserType.INTERNAL))
+            traits_as_z3_map(authz_context, user_traits, UserType.INTERNAL)
 
             user_role_names = user["spec"]["roles"]
             user_roles = filter(

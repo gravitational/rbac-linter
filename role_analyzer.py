@@ -755,7 +755,7 @@ def labels_as_z3_map(
     z3.RecAddDefinition(
         authz_context.entities[entity_type].keys,
         [required_key],
-        z3.Bool(False) if concrete_labels is None else z3.Or([required_key == z3.StringVal(key) for key in concrete_labels.keys()])
+        z3.BoolVal(False) if concrete_labels is None else z3.Or([required_key == z3.StringVal(key) for key in concrete_labels.keys()])
     )
 
     # Add definition of required labels function.
@@ -777,7 +777,7 @@ def labels_as_z3_map(
         z3.RecAddDefinition(
             authz_context.entities[other_entity_type].keys,
             [required_key],
-            z3.Bool(False)
+            z3.BoolVal(False)
         )
         label_key = z3.String(f"{other_entity_type.value.name}_label_key")
         z3.RecAddDefinition(
@@ -809,7 +809,7 @@ def traits_as_z3_map(
             user_trait_key,
             [] if concrete_traits is None else list(concrete_traits.items()),
             lambda traits: z3.Or([user_trait_value == z3.StringVal(trait) for trait in traits]),
-            z3.Bool(False)
+            z3.BoolVal(False)
         )
     )
 
@@ -820,7 +820,7 @@ def traits_as_z3_map(
     z3.RecAddDefinition(
         authz_context.users[other_user_type],
         [other_user_trait_key, other_user_trait_value],
-        z3.Bool(False)
+        z3.BoolVal(False)
     )
 
 # Determines whether the given role provides the user access to the entity.
@@ -836,5 +836,7 @@ def role_allows_user_access_to_entity(
     authz_context = AuthzContext(False)
     traits_as_z3_map(authz_context, user_traits, user_type)
     labels_as_z3_map(authz_context, entity_labels, entity_type)
-    solver.add(allows(authz_context, role))
+    allows_expr = allows(authz_context, role)
+    print(allows_expr)
+    solver.add(allows_expr)
     return z3.sat == solver.check()
