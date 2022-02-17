@@ -1,13 +1,14 @@
 import argparse
 import logging
-from role_analyzer import allows
+from role_analyzer import allows, AuthzContext
 import yaml
 from z3 import Distinct, Solver, sat, unsat  # type: ignore
 
 
 def roles_are_equivalent(r1, r2) -> tuple[bool, str]:
-    r1 = allows(r1)
-    r2 = allows(r2)
+    authz_context = AuthzContext(True)
+    r1 = allows(authz_context, r1)
+    r2 = allows(authz_context, r2)
     s = Solver()
     s.add(Distinct(r1, r2))
     result = s.check()
