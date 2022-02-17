@@ -7,7 +7,7 @@ from role_analyzer import (
     traits_as_z3_map,
     EntityType,
     UserType,
-    AuthzContext
+    AuthzContext,
 )
 import yaml
 from z3 import Solver, sat  # type: ignore

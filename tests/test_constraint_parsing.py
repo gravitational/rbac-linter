@@ -8,7 +8,7 @@ from role_analyzer import (
     InterpolationConstraint,
     EmailFunctionConstraint,
     RegexReplaceFunctionConstraint,
-    UserType
+    UserType,
 )
 
 
