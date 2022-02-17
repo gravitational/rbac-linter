@@ -872,20 +872,27 @@ def traits_as_z3_map(
     )
 
 
-# Determines whether the given role provides the user access to the entity.
-# Does not check whether the user actually possesses that role.
 def role_allows_user_access_to_entity(
     role: typing.Any,
     user_traits: typing.Optional[dict[str, list[str]]],
-    user_type: UserType,
+    user_type: typing.Optional[UserType],
     entity_labels: dict[str, str],
     entity_type: EntityType,
-    solver: z3.Solver = z3.Solver(),
+    solver: z3.Solver
 ) -> bool:
+    """
+    Determines whether the given role provides the user access to the entity.
+    Does not check whether the user actually possesses that role.
+    """
     authz_context = AuthzContext(False)
     traits_as_z3_map(authz_context, user_traits, user_type)
     labels_as_z3_map(authz_context, entity_labels, entity_type)
     allows_expr = allows(authz_context, role)
-    # print(allows_expr)
+    logging.debug(allows_expr)
     solver.add(allows_expr)
-    return z3.sat == solver.check()
+    result = solver.check()
+    if z3.sat == result:
+        logging.debug(solver.model())
+        return True;
+    else:
+        return False;

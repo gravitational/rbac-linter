@@ -1,26 +1,20 @@
 import argparse
 import logging
 from role_analyzer import (
-    allows,
     is_role_template,
-    labels_as_z3_map,
-    traits_as_z3_map,
+    role_allows_user_access_to_entity,
     EntityType,
     UserType,
-    AuthzContext,
 )
 import yaml
 from z3 import Solver, sat  # type: ignore
 
 
 def node_matches_role(nodes, roles):
-    s = Solver()
-    authz_context = AuthzContext(False)
+    solver = Solver()
     for node in nodes:
-        s.push()
         node_name = node["spec"]["hostname"]
         node_labels = node["metadata"]["labels"]
-        labels_as_z3_map(authz_context, node_labels, EntityType.NODE)
         for role in roles:
             role_name = role["metadata"]["name"]
             if is_role_template(role):
@@ -28,40 +22,49 @@ def node_matches_role(nodes, roles):
                     f"Role {role_name} is a role template; try specifying --users to check who has access"
                 )
             else:
-                s.push()
-                s.add(allows(authz_context, role))
-                if sat == s.check():
+                solver.push()
+                allows = role_allows_user_access_to_entity(
+                    role,
+                    None,
+                    None,
+                    node_labels,
+                    EntityType.Node,
+                    solver,
+                )
+                solver.pop()
+                if allows:
                     print(f"Node {node_name} matches role {role_name}")
                 else:
                     print(f"Node {node_name} does not match role {role_name}")
-                s.pop()
-        s.pop()
 
 
 def node_matches_user(nodes, roles, users):
-    s = Solver()
-    authz_context = AuthzContext(False)
+    solver = Solver()
     for node in nodes:
-        s.push()
         node_name = node["spec"]["hostname"]
         node_labels = node["metadata"]["labels"]
-        labels_as_z3_map(authz_context, node_labels, EntityType.NODE)
 
         for user in users:
-            s.push()
             user_name = user["metadata"]["name"]
             user_traits = user["spec"]["traits"]
-            traits_as_z3_map(authz_context, user_traits, UserType.INTERNAL)
 
             user_role_names = user["spec"]["roles"]
             user_roles = filter(
                 lambda role: role["metadata"]["name"] in user_role_names, roles
             )
             for role in user_roles:
-                s.push()
                 role_name = role["metadata"]["name"]
-                s.add(allows(authz_context, role))
-                if sat == s.check():
+                solver.push()
+                allows = role_allows_user_access_to_entity(
+                    role,
+                    user_traits,
+                    UserType.INTERNAL,
+                    node_labels,
+                    EntityType.NODE,
+                    solver,
+                )
+                solver.pop()
+                if allows:
                     print(
                         f"User {user_name} has access to {node_name} via role {role_name}"
                     )
@@ -69,9 +72,6 @@ def node_matches_user(nodes, roles, users):
                     print(
                         f"User {user_name} does NOT have access to {node_name} via role {role_name}"
                     )
-                s.pop()
-            s.pop()
-        s.pop()
 
 
 def main():
