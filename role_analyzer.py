@@ -48,7 +48,6 @@ def other_entity_types(entity_type: EntityType) -> list[EntityType]:
     return list(filter(lambda e: e != entity_type, EntityType))
 
 
-# The Z3 variables modeling entities, on which constraints are placed.
 @dataclass
 class EntityAttributes:
     """
@@ -93,8 +92,6 @@ def get_user_type(user_type_str: str) -> UserType:
     raise ValueError(f"Invalid user type {user_type_str}")
 
 
-# The context for a given authorization analysis. Used to encapsulate
-# the variables on which constraints are placed.
 @dataclass
 class AuthzContext:
     """
@@ -204,8 +201,10 @@ class RegexReplaceFunctionConstraint:
     replace: str
 
 
-# Attempts to parse the given value as a regex.
 def try_parse_regex(value: str) -> typing.Optional[RegexConstraint]:
+    """
+    Attempts to parse the given value as a regex.
+    """
     try:
         parsed_regex = sre_parse.parse(value)
         is_regex = any(
@@ -222,8 +221,11 @@ template_value_pattern = re.compile(
     r'\{\{(?P<type>internal|external)\.(?P<key>[\w]+)(\["(?P<inner_key>[\w]+)"\])?\}\}'
 )
 
-# Attempts to parse template constraints of type {{internal.logins}}
+
 def try_parse_template(value: str) -> typing.Optional[UserTraitConstraint]:
+    """
+    Attempts to parse template constraints of type {{internal.logins}}
+    """
     match = template_value_pattern.match(value)
     if isinstance(match, re.Match):
         user_type = get_user_type(match.group("type"))
@@ -239,8 +241,11 @@ interpolation_value_pattern = re.compile(
     r'(?P<prefix>.*)\{\{(?P<type>internal|external)\.(?P<key>[\w]+)(\["(?P<inner_key>[\w]+)"\])?\}\}(?P<suffix>.*)'
 )
 
-# Attempts to parse interpolation constraints of type IAM#{external.foo}
+
 def try_parse_interpolation(value: str) -> typing.Optional[InterpolationConstraint]:
+    """
+    Attempts to parse interpolation constraints of type IAM#{external.foo}
+    """
     match = interpolation_value_pattern.match(value)
     if isinstance(match, re.Match):
         prefix = match.group("prefix")
@@ -260,8 +265,12 @@ email_function_value_pattern = re.compile(
     r'\{\{email\.local\([\s]*(?P<type>internal|external)\.(?P<key>[\w]+)(\["(?P<inner_key>[\w]+)"\])?[\s]*\)\}\}'
 )
 
-# Attempts to parse email function constraints of type {{email.local(external.email)}}
+
 def try_parse_email_function(value: str) -> typing.Optional[EmailFunctionConstraint]:
+    """
+    Attempts to parse email function constraints of type
+    {{email.local(external.email)}}
+    """
     match = email_function_value_pattern.match(value)
     if isinstance(match, re.Match):
         user_type = get_user_type(match.group("type"))
@@ -277,10 +286,14 @@ regex_function_value_pattern = re.compile(
     r'\{\{regexp\.replace\([\s]*(?P<type>internal|external)\.(?P<key>[\w]+)(\["(?P<inner_key>[\w]+)"\])?[\s]*,[\s]*"(?P<pattern>.*)"[\s]*,[\s]*"(?P<replace>.*)"[\s]*\)\}\}'
 )
 
-# Attempts to parse regexp replace function constraints of type {{regexp.replace(external.access, "foo", "bar")}}
+
 def try_parse_regexp_replace_function(
     value: str,
 ) -> typing.Optional[RegexReplaceFunctionConstraint]:
+    """
+    Attempts to parse regexp replace function constraints of type
+    {{regexp.replace(external.access, "foo", "bar")}}
+    """
     match = regex_function_value_pattern.match(value)
     if isinstance(match, re.Match):
         user_type = get_user_type(match.group("type"))
@@ -295,8 +308,10 @@ def try_parse_regexp_replace_function(
         return None
 
 
-# Determines whether the given constraint requires user traits to specify.
 def requires_user_traits(values: typing.Union[str, list[str]]) -> bool:
+    """
+    Determines whether the given constraint requires user traits to specify.
+    """
     if not isinstance(values, list):
         values = [values]
     for value in values:
@@ -314,7 +329,6 @@ def requires_user_traits(values: typing.Union[str, list[str]]) -> bool:
     return False
 
 
-# Determines the category of the constraint value and parses it appropriately.
 def parse_constraint(
     value: str,
 ) -> typing.Union[
@@ -326,6 +340,9 @@ def parse_constraint(
     EmailFunctionConstraint,
     RegexReplaceFunctionConstraint,
 ]:
+    """
+    Determines the category of the constraint value and parses it appropriately.
+    """
 
     if "*" == value:
         return AnyValueConstraint(value)
@@ -353,21 +370,27 @@ def parse_constraint(
     return StringConstraint(value)
 
 
-# The Z3 regex matching all strings accepted by re1 but not re2.
-# Formatted in camelcase to mimic Z3 regex API.
 def Minus(re1: z3.ReRef, re2: z3.ReRef) -> z3.ReRef:
+    """
+    The Z3 regex matching all strings accepted by re1 but not re2.
+    Formatted in camelcase to mimic Z3 regex API.
+    """
     return z3.Intersect(re1, z3.Complement(re2))
 
 
-# The Z3 regex matching any character (currently only ASCII supported).
-# Formatted in camelcase to mimic Z3 regex API.
 def AnyChar() -> z3.ReRef:
+    """
+    The Z3 regex matching any character (currently only ASCII supported).
+    Formatted in camelcase to mimic Z3 regex API.
+    """
     return z3.Range(chr(0), chr(127))
     # return z3.AllChar(z3.StringSort())
 
 
-# Defines regex categories in Z3.
 def category_regex(category: sre_constants._NamedIntConstant) -> z3.ReRef:
+    """
+    Defines regex categories in Z3.
+    """
     if sre_constants.CATEGORY_DIGIT == category:
         return z3.Range("0", "9")
     elif sre_constants.CATEGORY_SPACE == category:
@@ -384,8 +407,10 @@ def category_regex(category: sre_constants._NamedIntConstant) -> z3.ReRef:
         )
 
 
-# Translates a specific regex construct into its Z3 equivalent.
 def regex_construct_to_z3_expr(regex_construct) -> z3.ReRef:
+    """
+    Translates a specific regex construct into its Z3 equivalent.
+    """
     node_type, node_value = regex_construct
     if sre_constants.LITERAL == node_type:  # a
         return z3.Re(chr(node_value))
@@ -473,9 +498,11 @@ def regex_construct_to_z3_expr(regex_construct) -> z3.ReRef:
         )
 
 
-# Translates a parsed regex into its Z3 equivalent.
-# The parsed regex is a sequence of regex constructs (literals, *, +, etc.)
 def regex_to_z3_expr(regex: sre_parse.SubPattern) -> z3.ReRef:
+    """
+    Translates a parsed regex into its Z3 equivalent.
+    The parsed regex is a sequence of regex constructs (literals, *, +, etc.)
+    """
     if 0 == len(regex.data):
         raise ValueError("ERROR: regex is empty")
     elif 1 == len(regex.data):
@@ -486,16 +513,18 @@ def regex_to_z3_expr(regex: sre_parse.SubPattern) -> z3.ReRef:
         )
 
 
-# Constructs an expression evaluating whether a specific label constraint
-# is satisfied by a given node, database, or k8s cluster.
-# Example value for key : value parameters:
-#
-# 'location' : 'us-east-[\d]+'
-# 'owner' : {{external.email}}
-#
 def matches_value(
-    authz_context: AuthzContext, labels: z3.FuncDeclRef, key: z3.SeqRef, value: str
+    authz_context: AuthzContext, entity_type: EntityType, key: z3.SeqRef, value: str
 ) -> z3.BoolRef:
+    """
+    Constructs an expression evaluating whether a specific label constraint
+    is satisfied by a given node, database, or k8s cluster.
+    Example value for key : value parameters:
+
+    'location' : 'us-east-[\\d]+'
+    'owner' : {{external.email}}
+    """
+    labels = authz_context.entities[entity_type].labels
     constraint = parse_constraint(value)
     # 'key' : '*'
     if isinstance(constraint, AnyValueConstraint):
@@ -572,20 +601,20 @@ def matches_value(
         )
 
 
-# Constructs an expression evaluating whether a specific label constraint
-# is satisfied by a given node, database, or k8s cluster; constraint can
-# take the form of a list of permissible values.
-# Example value for key : value parameters:
-#
-# 'env' : ['test', 'prod']
-#
 def matches_constraint(
     authz_context: AuthzContext,
-    labels: z3.FuncDeclRef,
-    label_keys: z3.FuncDeclRef,
+    entity_type: EntityType,
     key: str,
     value: typing.Union[str, list[str]],
 ) -> z3.BoolRef:
+    """
+    Constructs an expression evaluating whether a specific label constraint
+    is satisfied by a given node, database, or k8s cluster; constraint can
+    take the form of a list of permissible values.
+    Example value for key : value parameters:
+
+    'env' : ['test', 'prod']
+    """
     logging.debug(f"Compiling {key} : {value} constraint")
     if "*" == key:
         if "*" == value:
@@ -594,69 +623,70 @@ def matches_constraint(
             raise ValueError(f"Constraint of type '*' : {value} is not valid")
 
     key = z3.StringVal(key)
+    label_keys = authz_context.entities[entity_type].keys
     if isinstance(value, list):
         return z3.And(
             label_keys(key),
-            z3.Or([matches_value(authz_context, labels, key, v) for v in value]),
+            z3.Or([matches_value(authz_context, entity_type, key, v) for v in value]),
         )
     else:
-        return z3.And(label_keys(key), matches_value(authz_context, labels, key, value))
+        return z3.And(
+            label_keys(key), matches_value(authz_context, entity_type, key, value)
+        )
 
 
-# Constructs an expression evaluating to whether a given set of label
-# requirements are satisfied by a given node, database, or k8s cluster.
-# Example value for constraints parameter:
-#
-# {'env' : ['test', 'prod'], 'location' : 'us-east-[\d]+' }
-#
-# The constraint_fold parameter is itself a function determining how the
-# sub-constraints should be combined (conjunction or disjunction).
-#
 def matches_constraints(
     authz_context: AuthzContext,
-    constraint_type: str,
-    labels: z3.FuncDeclRef,
-    label_keys: z3.FuncDeclRef,
+    entity_type: EntityType,
     constraints: dict[str, typing.Union[str, list[str]]],
     constraint_fold: typing.Callable,
 ) -> z3.BoolRef:
-    logging.debug(f"Compiling {constraint_type} constraints")
+    """
+    Constructs an expression evaluating to whether a given set of label
+    requirements are satisfied by a given node, database, or k8s cluster.
+    Example value for constraints parameter:
+
+    {'env' : ['test', 'prod'], 'location' : 'us-east-[\\d]+' }
+
+    The constraint_fold parameter is itself a function determining how the
+    sub-constraints should be combined (conjunction or disjunction).
+    """
+    logging.debug(f"Compiling {entity_type} constraints")
     return constraint_fold(
         [
-            matches_constraint(authz_context, labels, label_keys, key, value)
+            matches_constraint(authz_context, entity_type, key, value)
             for key, value in constraints.items()
         ]
     )
 
 
-# Constructs an expression evaluating to whether a given constraint group
-# (either Allow or Deny) matches the labels of a given node, database, or
-# k8s cluster.
-# Example value for group parameter:
-#
-# node_labels:
-#   'env' : 'test'
-#   'owner' : '.*@email.com'
-# database_labels:
-#   'contains_PII' : 'no'
-#
-# The constraint_fold parameter is itself a function determining how the
-# sub-constraints should be combined (conjunction or disjunction).
-#
 def matches_constraint_group(
     authz_context: AuthzContext,
     group: dict[str, dict[str, typing.Union[str, list[str]]]],
     constraint_fold: typing.Callable,
 ) -> z3.BoolRef:
+    """
+    Constructs an expression evaluating to whether a given constraint group
+    (either Allow or Deny) matches the labels of a given node, database, or
+    k8s cluster.
+    Example value for group parameter:
+
+    node_labels:
+      'env' : 'test'
+      'owner' : '.*@email.com'
+    database_labels:
+      'contains_PII' : 'no'
+
+    The constraint_fold parameter is itself a function determining how the
+    sub-constraints should be combined (conjunction or disjunction).
+    """
     return z3.Or(
         [
-            (constraint_type := entity_type.value.labels_name) in group
+            (entity_type_name := entity_type.value.labels_name) in group
             and matches_constraints(
                 authz_context,
-                constraint_type,
-                authz_context.entities[entity_type].labels,
-                authz_context.entities[entity_type].keys,
-                group[constraint_type],
+                entity_type,
+                group[entity_type_name],
                 constraint_fold,
             )
             for entity_type in EntityType
@@ -664,21 +694,22 @@ def matches_constraint_group(
     )
 
 
-# Constructs an expression evaluating to whether a given role
-# gives access to a specific node, database, or k8s cluster.
-# Example value for role parameter:
-#
-# spec:
-#  allow:
-#    node_labels:
-#      'env' : 'test'
-#    kubernetes_labels:
-#      'service' : 'company_app'
-#  deny:
-#    node_labels:
-#      'env' : 'prod'
-#
 def allows(authz_context: AuthzContext, role: typing.Any) -> z3.BoolRef:
+    """
+    Constructs an expression evaluating to whether a given role
+    gives access to a specific node, database, or k8s cluster.
+    Example value for role parameter:
+
+    spec:
+     allow:
+       node_labels:
+         'env' : 'test'
+       kubernetes_labels:
+         'service' : 'company_app'
+     deny:
+       node_labels:
+         'env' : 'prod'
+    """
     role_name = role["metadata"]["name"]
     logging.debug(f"Compiling role template {role_name}")
     spec = role["spec"]
@@ -693,8 +724,11 @@ def allows(authz_context: AuthzContext, role: typing.Any) -> z3.BoolRef:
     return z3.And(allow_expr, z3.Not(deny_expr))
 
 
-# Determines whether the given role is a role template, filled in by user traits.
 def is_role_template(role) -> bool:
+    """
+    Determines whether the given role is a role template, filled in by user
+    traits.
+    """
     spec = role["spec"]
     if "allow" in spec:
         allow = spec["allow"]
@@ -852,6 +886,6 @@ def role_allows_user_access_to_entity(
     traits_as_z3_map(authz_context, user_traits, user_type)
     labels_as_z3_map(authz_context, entity_labels, entity_type)
     allows_expr = allows(authz_context, role)
-    print(allows_expr)
+    # print(allows_expr)
     solver.add(allows_expr)
     return z3.sat == solver.check()
