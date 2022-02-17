@@ -835,7 +835,7 @@ def labels_as_z3_map(
 
 def traits_as_z3_map(
     authz_context: AuthzContext,
-    concrete_traits: typing.Optional[dict[str, list[str]]],
+    concrete_traits: dict[str, list[str]],
     user_type: UserType,
 ):
     """
@@ -853,7 +853,7 @@ def traits_as_z3_map(
         [user_trait_key, user_trait_value],
         Case(
             user_trait_key,
-            [] if concrete_traits is None else list(concrete_traits.items()),
+            list(concrete_traits.items()),
             lambda traits: z3.Or(
                 [user_trait_value == z3.StringVal(trait) for trait in traits]
             ),
@@ -885,7 +885,8 @@ def role_allows_user_access_to_entity(
     Does not check whether the user actually possesses that role.
     """
     authz_context = AuthzContext(False)
-    traits_as_z3_map(authz_context, user_traits, user_type)
+    if user_traits is not None and user_type is not None:
+        traits_as_z3_map(authz_context, user_traits, user_type)
     labels_as_z3_map(authz_context, entity_labels, entity_type)
     allows_expr = allows(authz_context, role)
     logging.debug(allows_expr)
