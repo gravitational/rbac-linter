@@ -878,7 +878,7 @@ def role_allows_user_access_to_entity(
     user_type: typing.Optional[UserType],
     entity_labels: dict[str, str],
     entity_type: EntityType,
-    solver: z3.Solver
+    solver: z3.Solver,
 ) -> bool:
     """
     Determines whether the given role provides the user access to the entity.
@@ -894,6 +894,6 @@ def role_allows_user_access_to_entity(
     result = solver.check()
     if z3.sat == result:
         logging.debug(solver.model())
-        return True;
+        return True
     else:
-        return False;
+        return False
