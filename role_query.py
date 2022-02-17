@@ -29,7 +29,7 @@ def node_matches_role(nodes, roles):
                 )
             else:
                 s.push()
-                s.add(allows(role))
+                s.add(allows(authz_context, role))
                 if sat == s.check():
                     print(f"Node {node_name} matches role {role_name}")
                 else:
@@ -60,7 +60,7 @@ def node_matches_user(nodes, roles, users):
             for role in user_roles:
                 s.push()
                 role_name = role["metadata"]["name"]
-                s.add(allows(role))
+                s.add(allows(authz_context, role))
                 if sat == s.check():
                     print(
                         f"User {user_name} has access to {node_name} via role {role_name}"
