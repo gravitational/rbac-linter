@@ -104,6 +104,7 @@ Roles function as a boolean expression over user traits and entity labels, deter
 Teleport possesses a large variety of possible role constraints, documented [here](https://goteleport.com/docs/access-controls/reference/#roles).
 
 This work is conceptually similar to prior work [checking equivalence of firewalls](https://ahelwer.ca/post/2018-02-13-z3-firewall/), but here the constraints are over strings instead of IP addresses and ports.
+You can read more about this project on [the Teleport blog](https://goteleport.com/blog/z3-rbac/).
 
 ## Z3 issues impacting this project
 #### [Regex performance cliff when using InRe](https://github.com/Z3Prover/z3/issues/5648)
